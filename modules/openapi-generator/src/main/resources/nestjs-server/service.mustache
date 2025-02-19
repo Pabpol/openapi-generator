@@ -1,0 +1,10 @@
+export interface I{{classname}}Service {
+{{#operations}}
+    {{#operation}}
+        {{#summary}}/** {{summary}} */{{/summary}}
+        {{operationId}}(
+        {{#allParams}}{{paramName}}: {{{dataType}}}, {{/allParams}}
+        ): Promise<{{{returnType}}}>;
+    {{/operation}}
+{{/operations}}
+}

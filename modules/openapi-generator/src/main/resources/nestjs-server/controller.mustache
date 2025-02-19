@@ -1,0 +1,26 @@
+import { Controller, {{#hasAuth}}UseGuards, {{/hasAuth}} Get, Post, Body, Param } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
+import { I{{classname}}Service } from '../services/I{{classname}}Service';
+import { {{classname}}Dto } from '../dto/{{classname}}Dto';
+
+@ApiTags('{{classname}}')
+@Controller('{{basePath}}')
+export class {{classname}}Controller {
+constructor(private readonly {{classname}}Service: I{{classname}}Service) {}
+
+{{#operations}}
+    {{#operation}}
+        {{#summary}}/** {{summary}} */{{/summary}}
+        {{#notes}}/** {{notes}} */{{/notes}}
+        @{{httpMethod}}('{{path}}')
+        async {{operationId}}(
+        {{#allParams}}
+            {{#isBodyParam}}@Body() {{paramName}}: {{{dataType}}},{{/isBodyParam}}
+            {{#isPathParam}}@Param('{{paramName}}') {{paramName}}: {{{dataType}}},{{/isPathParam}}
+        {{/allParams}}
+        ): Promise<{{{returnType}}}> {
+        return this.{{classname}}Service.{{operationId}}({{#allParams}}{{paramName}}, {{/allParams}});
+        }
+    {{/operation}}
+{{/operations}}
+}

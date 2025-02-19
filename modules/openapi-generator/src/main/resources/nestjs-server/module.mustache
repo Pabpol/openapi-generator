@@ -1,0 +1,9 @@
+import { Module } from '@nestjs/common';
+import { {{classname}}Controller } from '../controllers/{{classname}}Controller';
+import { I{{classname}}Service } from '../services/I{{classname}}Service';
+
+@Module({
+controllers: [{{classname}}Controller],
+providers: [{ provide: I{{classname}}Service, useClass: /* Implementación */ }],
+})
+export class {{classname}}Module {}

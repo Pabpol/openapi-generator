@@ -1,0 +1,10 @@
+import { {{#requiredVars}}IsNotEmpty, {{/requiredVars}} IsString } from 'class-validator';
+
+export class {{classname}}Dto {
+{{#vars}}
+    {{#description}}/** {{description}} */{{/description}}
+    {{#required}}@IsNotEmpty(){{/required}}
+    @IsString()
+    {{name}}: string;
+{{/vars}}
+}
