@@ -1,10 +1,14 @@
-import { {{#requiredVars}}IsNotEmpty, {{/requiredVars}} IsString } from 'class-validator';
+{{#models}}{{#model}}
+import { ApiProperty } from '@nestjs/swagger';
+import { IsOptional, IsNotEmpty } from 'class-validator';
 
 export class {{classname}}Dto {
 {{#vars}}
-    {{#description}}/** {{description}} */{{/description}}
+    @ApiProperty({ description: '{{#description}}{{.}}{{/description}}{{^description}}No description{{/description}}' })
     {{#required}}@IsNotEmpty(){{/required}}
     @IsString()
     {{name}}: string;
 {{/vars}}
+{{/model}}
 }
+{{/models}}

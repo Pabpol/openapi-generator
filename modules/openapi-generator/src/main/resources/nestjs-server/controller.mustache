@@ -2,9 +2,13 @@ import { Controller, {{#hasAuth}}UseGuards, {{/hasAuth}} Get, Post, Body, Param 
 import { ApiTags } from '@nestjs/swagger';
 import { I{{classname}}Service } from '../services/I{{classname}}Service';
 import { {{classname}}Dto } from '../dto/{{classname}}Dto';
+{{#hasAuth}}
+    import { ScopeGuard } from '../guards/scope.guard';
+{{/hasAuth}}
 
 @ApiTags('{{classname}}')
 @Controller('{{basePath}}')
+{{#hasAuth}}@UseGuards(ScopeGuard){{/hasAuth}}
 export class {{classname}}Controller {
 constructor(private readonly {{classname}}Service: I{{classname}}Service) {}
 
