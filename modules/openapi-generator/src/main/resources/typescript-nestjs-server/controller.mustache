@@ -1,0 +1,30 @@
+
+import { Controller, Get, Post, Put, Delete, Patch, Body, Param, Query, Headers, UseGuards } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
+import { {{classname}}ServiceInterface } from '../services/{{classname}}ServiceInterface';
+{{#imports}}import { {{classname}} } from '../models/{{classname}}';
+{{/imports}}
+{{#requiresScopeGuardGlobal}}import { ScopeGuard } from '../guards/scope.guard';
+import { Scopes } from '../decorators/scopes.decorator';
+{{/requiresScopeGuardGlobal}}
+
+{{#requiresScopeGuardGlobal}}@UseGuards(ScopeGuard){{/requiresScopeGuardGlobal}}
+@ApiTags('{{classname}}')
+@Controller('{{basePath}}')
+export class {{classname}}Controller {
+constructor(private readonly {{camelCase classname}}service: {{classname}}ServiceInterface) {}
+
+{{#operations}}
+    {{#operation}}
+        {{#summary}}/** {{summary}} */{{/summary}}
+        {{#notes}}/** {{notes}} */{{/notes}}
+        @{{httpMethod}}('{{{path}}}')
+        {{#vendorExtensions.scopes}}
+            @Scopes({{{vendorExtensions.scopes}}})
+        {{/vendorExtensions.scopes}}
+        async {{operationId}}({{{vendorExtensions.controllerSignatureList}}}): Promise<{{{returnType}}}> {
+        return await this.{{camelCase classname}}service.{{operationId}}({{vendorExtensions.argList}});
+        }
+    {{/operation}}
+{{/operations}}
+}
