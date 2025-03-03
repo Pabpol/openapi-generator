@@ -1,0 +1,15 @@
+/**
+* This abstract class defines the contract for the {{serviceName}} API service.
+* Implement this class to provide the concrete business logic.
+*/
+export abstract class {{serviceName}} {
+{{#operations}}
+    /**
+    * {{summary}}
+    * {{#notes}}
+        * {{notes}}
+        * {{/notes}}
+    */
+    abstract {{operationId}}({{vendorExtensions.serviceSignatureList}}): Promise<{{{vendorExtensions.returnType}}}>;
+{{/operations}}
+}

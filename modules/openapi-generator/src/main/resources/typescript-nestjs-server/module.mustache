@@ -1,0 +1,22 @@
+import { Module } from '@nestjs/common';
+{{#requiresScopeGuardGlobal}}import { ScopeGuard } from './guards/scope.guard';
+import { Scopes } from './decorators/scopes.decorator';
+{{/requiresScopeGuardGlobal}}
+{{#controllers}}import { {{controllerName}}{{controllerSuffix}} } from './apis/{{controllerFileName}}';
+{{/controllers}}
+{{#services}}import { {{serviceName}}{{serviceSuffix}} } from './services/{{serviceFileName}}';
+{{/services}}
+
+@Module({
+    controllers: [
+    {{#controllers}}
+        {{controllerName}}{{controllerSuffix}},
+    {{/controllers}}
+    ],
+    exports: [
+    {{#services}}
+        {{serviceName}}{{serviceSuffix}},
+    {{/services}}
+    ]
+})
+export class ApiModule {}

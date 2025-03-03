@@ -1,0 +1,12 @@
+import { Injectable } from '@nestjs/common';
+import { I{{serviceName}}{{serviceSuffix}} } from './I{{serviceName}}{{serviceSuffix}}';
+
+@Injectable()
+export class {{serviceName}}{{serviceSuffix}} implements I{{serviceName}}{{serviceSuffix}} {
+{{#operations}}
+    async {{operationId}}({{#hasBody}}body: {{bodyType}}{{/hasBody}}{{^hasBody}}{{#hasPathParam}}params: any{{/hasPathParam}}{{/hasBody}}): Promise<{{returnType}}> {
+    // TODO: Implement business logic for {{operationId}}
+    return; // Replace with actual implementation
+    }
+{{/operations}}
+}
