@@ -146,6 +146,29 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
     }
 
     @Override
+    public String toVarName(String name) {
+        // sanitize name
+        name = sanitizeName(name);
+
+        // replace - with _ e.g. created-at => created_at
+        name = name.replaceAll("-", "_");
+
+        // if it's all upper case, do nothing
+        if (name.matches("^[A-Z_]*$"))
+            return name;
+
+        // camelize the variable name
+        // pet_id => PetId
+        name = camelize(name, LOWERCASE_FIRST_LETTER);
+
+        // for reserved word or word starting with number, append _
+        if (isReservedWord(name) || name.matches("^\\d.*"))
+            name = escapeReservedWord(name);
+
+        return name;
+    }
+
+    @Override
     public void processOpts() {
         super.processOpts();
         typeMapping.put("string", "string");

@@ -157,5 +157,4 @@ org.openapitools.codegen.languages.WsdlSchemaCodegen
 org.openapitools.codegen.languages.XojoClientCodegen
 org.openapitools.codegen.languages.ZapierClientCodegen
 org.openapitools.codegen.languages.NestJSGenerator
-org.openapitools.codegen.languages.TypeScriptNestjsUnifiedCodegen
 org.openapitools.codegen.languages.TypeScriptNestjsServerCodegen
