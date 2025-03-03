@@ -1,0 +1,12 @@
+import { NestFactory } from '@nestjs/core';
+import { ApiModule } from './api.module';
+
+async function bootstrap() {
+const app = await NestFactory.create(ApiModule);
+// Opcional: establecer un prefijo global para todas las rutas
+{{#globalPrefix}}
+    app.setGlobalPrefix('{{globalPrefix}}');
+{{/globalPrefix}}
+await app.listen({{port}});
+}
+bootstrap();
