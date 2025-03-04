@@ -1,13 +1,16 @@
 package org.openapitools.codegen.languages;
 
 import io.swagger.v3.oas.models.Operation;
+import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.servers.Server;
 import org.openapitools.codegen.*;
 import org.openapitools.codegen.api.TemplatingExecutor;
 import org.openapitools.codegen.meta.GeneratorMetadata;
 import org.openapitools.codegen.meta.Stability;
 import org.openapitools.codegen.model.ModelMap;
+import org.openapitools.codegen.model.ModelsMap;
 import org.openapitools.codegen.model.OperationsMap;
+import org.openapitools.codegen.utils.ModelUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -144,7 +147,6 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
     public String getHelp() {
         return "Generates a NestJS server with support for model validations, scope guard security, and separated service interfaces.";
     }
-
     @Override
     public String toVarName(String name) {
         // sanitize name
@@ -166,6 +168,23 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
             name = escapeReservedWord(name);
 
         return name;
+    }
+    @Override
+    public String getTypeDeclaration(Schema p) {
+        if (ModelUtils.isArraySchema(p)) {
+            // Obtener el schema de los elementos del array
+            Schema<?> items = ModelUtils.getSchemaItems(p);
+            // Obtener el tipo del elemento (se aplican las transformaciones necesarias, por ejemplo, sufijos)
+            String innerType = getTypeDeclaration(items);
+            // En TypeScript se suele usar la notación de corchetes para arrays
+            return innerType + "[]";
+        } else if (ModelUtils.isMapSchema(p)) {
+            // Si fuera un map, se puede devolver una notación de objeto
+            Schema<?> inner = ModelUtils.getAdditionalProperties(p);
+            String innerType = getTypeDeclaration(inner);
+            return "{ [key: string]: " + innerType + " }";
+        }
+        return super.getTypeDeclaration(p);
     }
 
     @Override
@@ -319,6 +338,26 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         generateModuleFile(operationsByTag);
         additionalProperties.put("requiresScopeGuardGlobal", requiresScopeGuardGlobal);
         return operationsMap;
+    }
+    @Override
+    public Map<String, ModelsMap> postProcessAllModels(Map<String, ModelsMap> objs) {
+        Map<String, ModelsMap> models = super.postProcessAllModels(objs);
+        for (ModelsMap modelsMap : models.values()) {
+            for (ModelMap modelMap : modelsMap.getModels()) {
+                CodegenModel model = modelMap.getModel();
+                for (CodegenProperty prop : model.allVars) {
+                    // Si el formato es 'base64', marcar para que se incluya la validación @IsBase64()
+                    if (prop.getDataFormat() != null && prop.getDataFormat().equalsIgnoreCase("base64")) {
+                        prop.vendorExtensions.put("isBase64", true);
+                    }
+                    // Si el nombre viene en snake_case (p.ej. "customer_id"), se puede transformar a camelCase
+                    // Aquí puedes aplicar tu propia lógica o utilizar una función helper
+                    String transformed = toVarName(prop.baseName); // O bien, una función que convierta "customer_id" a "customerId"
+                    prop.name = transformed;
+                }
+            }
+        }
+        return models;
     }
 
     @Override
