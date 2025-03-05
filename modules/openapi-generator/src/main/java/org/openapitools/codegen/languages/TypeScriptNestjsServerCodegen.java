@@ -214,7 +214,7 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
     @Override
     public boolean needToImport(String type) {
         // Lista de tipos que no deben importarse (primitivos en TypeScript)
-        if ("string".equals(type) || "array".equals(type) ) {
+        if ("string".equals(type) || "array".equals(type) || "boolean".equals(type) || "number".equals(type) || "any".equals(type) ) {
             return false;
         }
         return super.needToImport(type);
@@ -403,7 +403,7 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
                 boolean modelHasEnum = false;
                 for (String imp : model.imports) {
                     // Filtrar los tipos que no queremos importar (por ejemplo, primitivos o genéricos no generados)
-                    if ("List".equals(imp) || "number".equals(imp) || "Map".equalsIgnoreCase(imp)  || "object".equals(imp) || "DateTime".equals(imp)) {
+                    if ("List".equals(imp) || "number".equals(imp) || "Map".equalsIgnoreCase(imp)  || "object".equals(imp) || "DateTime".equalsIgnoreCase(imp) || "Date".equalsIgnoreCase(imp) || "any".equalsIgnoreCase(imp)) {
                         continue;
                     }
                     Map<String, String> entry = new HashMap<>();
@@ -589,6 +589,42 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
             templateData.put("serviceName", serviceName);
             templateData.put("tag", tag);
             templateData.put("operations", ops);
+
+            Set<Map<String, String>> importSet = new HashSet<>();
+            for (CodegenOperation op :ops){
+                if (op.returnType != null){
+                    String typeName = op.returnType;
+                    if (typeName.endsWith("[]")){
+                        typeName = typeName.substring(0, typeName.length() - 2);
+                    }
+                    if (needToImport(typeName)){
+                        Map<String, String> imp = new HashMap<>();
+                        imp.put("classname", typeName);
+                        imp.put("importPath", "../models");
+                        imp.put("filename", toModelFilename(typeName));
+                        importSet.add(imp);
+                    }
+
+                }
+                if (op.allParams != null ){
+                    for (CodegenParameter param : op.allParams){
+                        if (param.dataType != null) {
+                            String paramType = param.dataType;
+                            if (paramType.endsWith("[]")){
+                                paramType = paramType.substring(0, paramType.length() - 2);
+                            }
+                            if (needToImport(paramType)){
+                                Map<String, String> imp = new HashMap<>();
+                                imp.put("classname", paramType);
+                                imp.put("importPath", "../models");
+                                imp.put("filename", toModelFilename(paramType));
+                                importSet.add(imp);
+                            }
+                        }
+                    }
+                }
+            }
+            templateData.put("imports", new ArrayList<>(importSet));
             String rendered = renderTemplate("service.interface.mustache", templateData);
             String outputDir = outputFolder + File.separator + "services";
             File dir = new File(outputDir);

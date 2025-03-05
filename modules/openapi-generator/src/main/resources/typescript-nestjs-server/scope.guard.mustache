@@ -19,6 +19,6 @@ const user = request.user;
 if (!user || !user.scopes) {
 return false;
 }
-return requiredScopes.some(scope => user.scopes.includes(scope));
+return requiredScopes.some((scope: any) => user.scopes.includes(scope));
 }
 }

@@ -2,6 +2,9 @@
 * This abstract class defines the contract for the {{serviceName}} API service.
 * Implement this class to provide the concrete business logic.
 */
+{{#imports}}import { {{classname}} } from '../models/{{classname}}';
+{{/imports}}
+
 export abstract class {{serviceName}} {
 {{#operations}}
     /**

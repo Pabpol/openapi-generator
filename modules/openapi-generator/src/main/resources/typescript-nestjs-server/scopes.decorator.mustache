@@ -1,4 +1,9 @@
 import { SetMetadata } from '@nestjs/common';
 
 export const SCOPES_KEY = 'scopes';
-export const Scopes = (...scopes: string[]) => SetMetadata("scopes", scopes);
+export const Scopes = (...scopes: (string | string[])[]) => {
+    const actualScopes = scopes.length === 1 && Array.isArray(scopes[0])
+        ? scopes[0]
+        : scopes as string[];
+    return SetMetadata(SCOPES_KEY, actualScopes);
+};
