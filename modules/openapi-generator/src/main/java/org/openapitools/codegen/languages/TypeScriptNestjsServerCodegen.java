@@ -2,6 +2,7 @@ package org.openapitools.codegen.languages;
 
 import io.swagger.v3.oas.models.Operation;
 import io.swagger.v3.oas.models.media.Schema;
+import io.swagger.v3.oas.models.responses.ApiResponse;
 import io.swagger.v3.oas.models.servers.Server;
 import org.openapitools.codegen.*;
 import org.openapitools.codegen.api.TemplatingExecutor;
@@ -170,6 +171,27 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         return name;
     }
     @Override
+    public String toModelName(String name) {
+        if (name == null || name.isEmpty()) {
+            return "DefaultModel";
+        }
+        // Si no contiene guiones bajos ni guiones, asumimos que ya está en formato PascalCase
+        if (!name.contains("_") && !name.contains("-")) {
+            return name;
+        }
+        // Separamos el nombre y capitalizamos cada parte
+        String[] parts = name.split("[-_]");
+        StringBuilder sb = new StringBuilder();
+        for (String part : parts) {
+            if (!part.isEmpty()) {
+                sb.append(part.substring(0, 1).toUpperCase())
+                        .append(part.substring(1));
+            }
+        }
+        return sb.toString();
+    }
+
+    @Override
     public String getTypeDeclaration(Schema p) {
         if (ModelUtils.isArraySchema(p)) {
             // Obtener el schema de los elementos del array
@@ -186,11 +208,21 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         }
         return super.getTypeDeclaration(p);
     }
-
+    @Override
+    public boolean needToImport(String type) {
+        // Lista de tipos que no deben importarse (primitivos en TypeScript)
+        if ("string".equals(type) || "array".equals(type) ) {
+            return false;
+        }
+        return super.needToImport(type);
+    }
     @Override
     public void processOpts() {
         super.processOpts();
         typeMapping.put("string", "string");
+        typeMapping.put("number", "number");
+        typeMapping.put("integer", "number");
+        typeMapping.put("long", "number");
 
         if (additionalProperties.containsKey(NEST_VERSION)) {
             nestVersion = additionalProperties.get(NEST_VERSION).toString();
@@ -248,6 +280,21 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
     public OperationsMap postProcessOperationsWithModels(OperationsMap objs, List<ModelMap> allModels) {
         OperationsMap operationsMap = super.postProcessOperationsWithModels(objs, allModels);
         boolean requiresScopeGuardGlobal = false;
+
+        if (operationsMap != null && operationsMap.getImports() != null) {
+            for (Map<String, String> imp : operationsMap.getImports()) {
+                String originalClassname = imp.get("classname");
+                if (originalClassname != null) {
+                    // Si el nombre contiene el prefijo "Models.", lo removemos
+                    if (originalClassname.startsWith("Models.")) {
+                        originalClassname = originalClassname.substring("Models.".length());
+                    }
+                    // Convertimos a PascalCase (por ejemplo, de "getGuestById205Response" a "GetGuestById205Response")
+                    String transformedClassname = toModelName(originalClassname);
+                    imp.put("classname", transformedClassname);
+                }
+            }
+        }
 
         if (operationsMap != null && operationsMap.getOperations() != null) {
             for (CodegenOperation op : operationsMap.getOperations().getOperation()) {
@@ -345,20 +392,119 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         for (ModelsMap modelsMap : models.values()) {
             for (ModelMap modelMap : modelsMap.getModels()) {
                 CodegenModel model = modelMap.getModel();
+                List<Map<String, String>> tsImports = new ArrayList<>();
+                boolean modelHasEnum = false;
+                for (String imp : model.imports) {
+                    // Filtrar los tipos que no queremos importar (por ejemplo, primitivos o genéricos no generados)
+                    if ("List".equals(imp) || "number".equals(imp)) {
+                        continue;
+                    }
+                    Map<String, String> entry = new HashMap<>();
+                    if ("UUID".equals(imp)) {
+                        entry.put("classname", "UUID");
+                        // Aquí definimos que UUID se importe desde 'crypto'
+                        entry.put("importPath", "crypto");
+                    } else {
+                        // Para otros tipos, aplicamos la transformación a PascalCase
+                        String transformed = toModelName(imp); // Ej: "GuestDto_companion" → "GuestDtoCompanion"
+                        entry.put("classname", transformed);
+                        entry.put("filename", toModelFilename(transformed));
+                        entry.put("importPath", "../models");
+                    }
+                    tsImports.add(entry);
+                }
+                model.vendorExtensions.put("tsImports", tsImports);
+
                 for (CodegenProperty prop : model.allVars) {
                     // Si el formato es 'base64', marcar para que se incluya la validación @IsBase64()
                     if (prop.getDataFormat() != null && prop.getDataFormat().equalsIgnoreCase("base64")) {
                         prop.vendorExtensions.put("isBase64", true);
                     }
+                    if (prop.isEnum) {
+                        modelHasEnum = true;
+                    }
                     // Si el nombre viene en snake_case (p.ej. "customer_id"), se puede transformar a camelCase
                     // Aquí puedes aplicar tu propia lógica o utilizar una función helper
-                    String transformed = toVarName(prop.baseName); // O bien, una función que convierta "customer_id" a "customerId"
-                    prop.name = transformed;
+                    prop.name = toVarName(prop.baseName);
                 }
+                model.vendorExtensions.put("hasEnums", modelHasEnum);
             }
         }
         return models;
     }
+    @Override
+    public CodegenModel fromModel(String name, Schema schema) {
+        // Llama al método base para procesar el modelo según la lógica existente
+        CodegenModel model = super.fromModel(name, schema);
+
+        // Actualiza el nombre del modelo final (classname) con tu transformación deseada.
+        // Por ejemplo, si el modelo se llama "GuestDto_companion", lo transforma a "GuestDtoCompanion".
+        model.classname = toModelName(model.schemaName);
+        // Agregar lógica para enums
+        if (schema.getEnum() != null && !schema.getEnum().isEmpty()) {
+            model.isEnum = true;
+            List<Object> enumValues = schema.getEnum();
+            List<Map<String, Object>> enumVars = new ArrayList<>();
+            for (int i = 0; i < enumValues.size(); i++) {
+                Object enumValue = enumValues.get(i);
+                Map<String, Object> ev = new HashMap<>();
+                // Convierte el valor en un nombre de variable TS válido.
+                // Por ejemplo: "available" -> "AVAILABLE" o "Available"
+                ev.put("name", toEnumVarName(enumValue.toString(), schema.getType()));
+                // Si se usan string enums, envolver el valor entre comillas.
+                ev.put("value", (Boolean.TRUE.equals(stringEnums) ? "\"" + enumValue.toString() + "\"" : enumValue.toString()));
+                ev.put("last", i == enumValues.size() - 1);
+                enumVars.add(ev);
+            }
+            Map<String, Object> allowableValues = new HashMap<>();
+            allowableValues.put("enumVars", enumVars);
+            model.allowableValues = allowableValues;
+        }
+        // Recorre todas las propiedades (allVars) para actualizar su dataType si es necesario
+        for (CodegenProperty prop : model.allVars) {
+            // Si la propiedad hace referencia a otro modelo y su dataType contiene guiones bajos,
+            // se transforma usando toModelName para obtener el nombre final deseado.
+            if (prop.dataType != null && prop.dataType.contains("_")) {
+                String transformedDataType = toModelName(prop.dataType);
+                prop.dataType = transformedDataType;
+                // Opcional: también actualizar datatypeWithEnum si aplica
+                prop.datatypeWithEnum = transformedDataType;
+            }
+        }
+
+        return model;
+    }
+    @Override
+    public CodegenProperty fromProperty(String name, Schema p) {
+        CodegenProperty prop = super.fromProperty(name, p);
+        if (p.getEnum() != null && !p.getEnum().isEmpty()) {
+            prop.isEnum = true;
+            // Obtiene los valores del enum
+            List<Object> enumValues = p.getEnum();
+            List<Map<String, Object>> enumVars = new ArrayList<>();
+            for (int i = 0; i < enumValues.size(); i++) {
+                Object enumValue = enumValues.get(i);
+                Map<String, Object> ev = new HashMap<>();
+                // Genera un nombre válido para el valor del enum
+                ev.put("name", toEnumVarName(enumValue.toString(), p.getType()));
+                // Si se usa stringEnums, se envuelve el valor entre comillas
+                ev.put("value", (Boolean.TRUE.equals(stringEnums) ? "\"" + enumValue.toString() + "\"" : enumValue.toString()));
+                ev.put("last", i == enumValues.size() - 1);
+                enumVars.add(ev);
+            }
+            // Se asigna la lista de variables generada a allowableValues
+            Map<String, Object> allowableValues = new HashMap<>();
+            allowableValues.put("enumVars", enumVars);
+            prop.allowableValues = allowableValues;
+            // Se asigna un nombre para el enum inline, por ejemplo: "StatusEnum" si la propiedad se llama "status"
+            prop.enumName = toModelName(prop.name) + "Enum";
+            // Esto hará que en el template se utilice el enumName en lugar de la propiedad primitiva
+            prop.datatypeWithEnum = prop.enumName;
+        }
+        return prop;
+    }
+
+
 
     @Override
     public CodegenOperation fromOperation(String resourcePath, String httpMethod, Operation operation, List<Server> servers) {
@@ -378,6 +524,31 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         LOGGER.info("Processed operation: {} [{}]", op.operationId, op.httpMethod);
         return op;
     }
+
+    @Override
+    public void postProcessModelProperty(CodegenModel model, CodegenProperty prop) {
+        super.postProcessModelProperty(model, prop);
+        if (prop.isEnum) {
+            // Si allowableValues tiene la clave "values", se genera "enumVars"
+            if (prop.allowableValues != null && prop.allowableValues.containsKey("values")) {
+                List<Object> enumValues = (List<Object>) prop.allowableValues.get("values");
+                List<Map<String, Object>> enumVars = new ArrayList<>();
+                for (int i = 0; i < enumValues.size(); i++) {
+                    Object enumValue = enumValues.get(i);
+                    Map<String, Object> ev = new HashMap<>();
+                    ev.put("name", toEnumVarName(enumValue.toString(), prop.dataType));
+                    ev.put("value", (Boolean.TRUE.equals(stringEnums)
+                            ? "\"" + enumValue.toString() + "\""
+                            : enumValue.toString()));
+                    ev.put("last", i == enumValues.size() - 1);
+                    enumVars.add(ev);
+                }
+                // Reemplazar o agregar la clave "enumVars" en allowableValues
+                prop.allowableValues.put("enumVars", enumVars);
+            }
+        }
+    }
+
 
     // Agrupa las operaciones por tag. Si no hay tag, se agrupa en "Default"
     protected Map<String, List<CodegenOperation>> groupOperationsByTag(OperationsMap operationsMap) {
@@ -512,8 +683,6 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
             String controllerName = serviceName; // O puede tener un prefijo o sufijo diferente
 
             // Genera los nombres de archivo (convierte a la convención deseada)
-//            String controllerFileName = convertUsingFileNamingConvention(controllerName);
-//            String serviceFileName = convertUsingFileNamingConvention(serviceName);
 
             Map<String, Object> ctrl = new java.util.HashMap<>();
             ctrl.put("controllerName", controllerName);

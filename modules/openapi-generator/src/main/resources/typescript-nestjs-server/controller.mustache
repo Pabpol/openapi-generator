@@ -1,6 +1,5 @@
 
 import { Controller, Get, Post, Put, Delete, Patch, Body, Param, Query, Headers, UseGuards } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
 import { {{classname}}ServiceInterface } from '../services/{{classname}}ServiceInterface';
 {{#imports}}import { {{classname}} } from '../models/{{classname}}';
 {{/imports}}
@@ -9,7 +8,6 @@ import { Scopes } from '../decorators/scopes.decorator';
 {{/requiresScopeGuardGlobal}}
 
 {{#requiresScopeGuardGlobal}}@UseGuards(ScopeGuard){{/requiresScopeGuardGlobal}}
-@ApiTags('{{classname}}')
 @Controller('{{basePath}}')
 export class {{classname}}Controller {
 constructor(private readonly {{camelCase classname}}service: {{classname}}ServiceInterface) {}
