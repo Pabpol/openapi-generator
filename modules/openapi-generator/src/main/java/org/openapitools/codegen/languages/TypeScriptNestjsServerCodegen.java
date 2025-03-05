@@ -193,6 +193,9 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
 
     @Override
     public String getTypeDeclaration(Schema p) {
+        if ("date-time".equals(p.getFormat())) {
+            return "string";
+        }
         if (ModelUtils.isArraySchema(p)) {
             // Obtener el schema de los elementos del array
             Schema<?> items = ModelUtils.getSchemaItems(p);
@@ -223,6 +226,10 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         typeMapping.put("number", "number");
         typeMapping.put("integer", "number");
         typeMapping.put("long", "number");
+        typeMapping.put("date", "string");
+        typeMapping.put("date-time", "string");
+        typeMapping.put("object", "any");
+
 
         if (additionalProperties.containsKey(NEST_VERSION)) {
             nestVersion = additionalProperties.get(NEST_VERSION).toString();
@@ -396,7 +403,7 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
                 boolean modelHasEnum = false;
                 for (String imp : model.imports) {
                     // Filtrar los tipos que no queremos importar (por ejemplo, primitivos o genéricos no generados)
-                    if ("List".equals(imp) || "number".equals(imp)) {
+                    if ("List".equals(imp) || "number".equals(imp) || "Map".equalsIgnoreCase(imp)  || "object".equals(imp) || "DateTime".equals(imp)) {
                         continue;
                     }
                     Map<String, String> entry = new HashMap<>();
