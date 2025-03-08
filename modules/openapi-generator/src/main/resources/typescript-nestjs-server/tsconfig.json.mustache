@@ -5,7 +5,12 @@
         "removeComments": true,
         "emitDecoratorMetadata": true,
         "experimentalDecorators": true,
-        "target": "{{#supportsES6}}es6{{/supportsES6}}{{^supportsES6}}es5{{/supportsES6}}",
+        "target": "es2015",
+        "lib": [
+            "es2015",
+            "dom"
+        ],
+        "types": ["node"],
         "sourceMap": true,
         "outDir": "./dist",
         "baseUrl": "./",
@@ -16,7 +21,7 @@
         "dist"
     ],
     "include": [
-    "./*"
+        "./*"
     ],
     "filesGlob": [
         "./model/*.ts",

@@ -1,34 +1,31 @@
 {
-    "name": "{{{projectName}}}",
-    "version": "{{{projectVersion}}}",
+    "name": "@apir/{{{projectName}}}-server",
+    "version": "{{{projectVersion}}}{{^projectSubVersion}}{{/projectSubVersion}}{{#projectSubVersion}}{{projectSubVersion}}{{/projectSubVersion}}",
     "description": "REST client for {{{npmName}}}",
     "author": "OpenAPI Generator Contributors",
-    "repository": {
-    "type": "git",
-    "url": "https://{{gitHost}}/{{gitUserId}}/{{gitRepoId}}.git"
-    },
-    "keywords": [
-    "swagger-client"
-    ],
-    "license": "{{licenseName}}",
+    "main": "dist/index.js",
     "scripts": {
-    "build": "tsc -p tsconfig.json"
+        "build": "npx tsc -p tsconfig.json"
     },
     "dependencies": {
-    "@nestjs/common": "^{{nestVersion}}",
-    "@nestjs/core": "^{{nestVersion}}",
-    "@nestjs/platform-express": "^{{nestVersion}}",
-    {{#useAxiosHttpModule}}
-        "@nestjs/axios": "^2.0.0",
-    {{/useAxiosHttpModule}}
-    "class-validator": "^0.13.2",
-    "reflect-metadata": "^0.1.13",
-    "rimraf": "^2.6.3",
-    "rxjs": "^7.1.0"
+        "@nestjs/common": "^{{nestVersion}}",
+        "@nestjs/core": "^{{nestVersion}}",
+        "@nestjs/platform-express": "^{{nestVersion}}",
+        {{#useAxiosHttpModule}}
+            "@nestjs/axios": "^2.0.0",
+        {{/useAxiosHttpModule}}
+        "class-validator": "^0.13.2",
+        "reflect-metadata": "^0.1.13",
+        "rimraf": "^2.6.3",
+        "rxjs": "^7.1.0"
+    },
+    "devDependencies": {
+        "typescript": "^4.0.0",
+        "@types/node": "^18.0.0"
     }{{#npmRepository}},{{/npmRepository}}
     {{#npmRepository}}
         "publishConfig": {
-        "registry": "{{{npmRepository}}}"
+            "registry": "{{{npmRepository}}}"
         }
     {{/npmRepository}}
 }

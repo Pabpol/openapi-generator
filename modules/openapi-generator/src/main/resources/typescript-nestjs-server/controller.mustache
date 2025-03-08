@@ -8,7 +8,7 @@ import { Scopes } from '../decorators/scopes.decorator';
 {{/requiresScopeGuardGlobal}}
 
 {{#requiresScopeGuardGlobal}}@UseGuards(ScopeGuard){{/requiresScopeGuardGlobal}}
-@Controller('{{basePath}}')
+@Controller()
 export class {{classname}}Controller {
 constructor(private readonly {{camelCase classname}}service: {{classname}}ServiceInterface) {}
 
