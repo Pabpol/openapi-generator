@@ -11,6 +11,7 @@ import org.openapitools.codegen.meta.Stability;
 import org.openapitools.codegen.model.ModelMap;
 import org.openapitools.codegen.model.ModelsMap;
 import org.openapitools.codegen.model.OperationsMap;
+import org.openapitools.codegen.utils.CamelizeOption;
 import org.openapitools.codegen.utils.ModelUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,9 +20,12 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.apache.commons.lang3.StringUtils.capitalize;
 import static org.openapitools.codegen.languages.TypeScriptNestjsClientCodegen.SERVICE_FILE_SUFFIX;
+import static org.openapitools.codegen.utils.CamelizeOption.LOWERCASE_FIRST_CHAR;
 import static org.openapitools.codegen.utils.CamelizeOption.LOWERCASE_FIRST_LETTER;
 import static org.openapitools.codegen.utils.StringUtils.*;
 
@@ -71,18 +75,18 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         // Archivos de soporte para configurar el proyecto
         supportingFiles.add(new SupportingFile("package.mustache", "", "package.json"));
         supportingFiles.add(new SupportingFile("tsconfig.json.mustache", "", "tsconfig.json"));
-        supportingFiles.add(new SupportingFile("index.mustache", getIndexDirectory(), "index.ts"));
-        supportingFiles.add(new SupportingFile("variables.mustache", getIndexDirectory(), "variables.ts"));
-        supportingFiles.add(new SupportingFile("gitignore", "", ".gitignore"));
-        supportingFiles.add(new SupportingFile("README.mustache", getIndexDirectory(), "README.md"));
+        supportingFiles.add(new SupportingFile("index.mustache", "", "index.ts"));
+//        supportingFiles.add(new SupportingFile("variables.mustache", getIndexDirectory(), "variables.ts"));
+//        supportingFiles.add(new SupportingFile("gitignore", "", ".gitignore"));
+//        supportingFiles.add(new SupportingFile("README.mustache", getIndexDirectory(), "README.md"));
         // Archivos de seguridad
         supportingFiles.add(new SupportingFile("scopes.decorator.mustache", "decorators", "scopes.decorator.ts"));
         supportingFiles.add(new SupportingFile("scope.guard.mustache", "guards", "scope.guard.ts"));
         // Archivo de arranque
-        supportingFiles.add(new SupportingFile("main.mustache", "src", "main.ts"));
+//        supportingFiles.add(new SupportingFile("main.mustache", "src", "main.ts"));
 
         // Definir paquetes internos
-        apiPackage = "apis";
+        apiPackage = "controllers";
         modelPackage = "models";
 
         // Registrar opciones CLI
@@ -176,11 +180,11 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
             return "DefaultModel";
         }
         // Si no contiene guiones bajos ni guiones, asumimos que ya está en formato PascalCase
-        if (!name.contains("_") && !name.contains("-")) {
+        if (!name.contains("_") && !name.contains("-") && !name.contains(" ")) {
             return name;
         }
         // Separamos el nombre y capitalizamos cada parte
-        String[] parts = name.split("[-_]");
+        String[] parts = name.split("[-_\\s]+");
         StringBuilder sb = new StringBuilder();
         for (String part : parts) {
             if (!part.isEmpty()) {
@@ -226,6 +230,7 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         typeMapping.put("number", "number");
         typeMapping.put("integer", "number");
         typeMapping.put("long", "number");
+        typeMapping.put("double", "number");
         typeMapping.put("date", "string");
         typeMapping.put("date-time", "string");
         typeMapping.put("object", "any");
@@ -269,6 +274,14 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         if (additionalProperties.containsKey(STRING_ENUMS)) {
             stringEnums = Boolean.parseBoolean(additionalProperties.get(STRING_ENUMS).toString());
         }
+        if (openAPI != null && openAPI.getInfo() != null) {
+            String title = openAPI.getInfo().getTitle();
+            String version = openAPI.getInfo().getVersion();
+            String projectName = title.toLowerCase().replaceAll("[^a-z0-9]+", "-");
+            projectName = projectName.replaceAll("-$", "");
+            additionalProperties.put("projectName", projectName);
+            additionalProperties.put("projectVersion", version);
+        }
         additionalProperties.put(STRING_ENUMS, stringEnums);
 
         // Inyectar propiedades globales para las plantillas
@@ -305,6 +318,18 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
 
         if (operationsMap != null && operationsMap.getOperations() != null) {
             for (CodegenOperation op : operationsMap.getOperations().getOperation()) {
+                if (op.path != null){
+                    Pattern pattern = Pattern.compile("\\{([^}]+)\\}");
+                    Matcher matcher = pattern.matcher(op.path);
+                    StringBuffer sb = new StringBuffer();
+                    while (matcher.find()){
+                        String inputParam = matcher.group(1);
+                        String outputParam = camelize(inputParam, CamelizeOption.LOWERCASE_FIRST_CHAR);
+                        matcher.appendReplacement(sb, ":" + outputParam);
+                    }
+                    matcher.appendTail(sb);
+                    op.path = sb.toString();
+                }
                 op.httpMethod = capitalize(op.httpMethod.toLowerCase(Locale.ENGLISH));
                 if (op.operationId == null || op.operationId.isEmpty()) {
                     op.operationId = "defaultMethod";
@@ -353,11 +378,11 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
                         if (param.isBodyParam) {
                             controllerAnnotation = "@Body() ";
                         } else if (param.isPathParam) {
-                            controllerAnnotation = "@Param('" + param.paramName + "') ";
+                            controllerAnnotation = "@Param('" + camelize(param.paramName, LOWERCASE_FIRST_CHAR) + "') ";
                         } else if (param.isQueryParam) {
-                            controllerAnnotation = "@Query('" + param.paramName + "') ";
+                            controllerAnnotation = "@Query('" + camelize(param.paramName, LOWERCASE_FIRST_CHAR) + "') ";
                         } else if (param.isHeaderParam) {
-                            controllerAnnotation = "@Headers('" + param.paramName + "') ";
+                            controllerAnnotation = "@Headers('" + camelize(param.paramName, LOWERCASE_FIRST_CHAR) + "') ";
                         }
                         // Firma para el controller: incluye decoradores
                         controllerSignatureBuilder.append(controllerAnnotation)
@@ -565,6 +590,7 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         }
         for (CodegenOperation op : operationsMap.getOperations().getOperation()) {
             String tag = (op.tags != null && !op.tags.isEmpty()) ? op.tags.get(0).getName() : "Default";
+            tag = toModelName(tag);
             if (!groupedOps.containsKey(tag)) {
                 groupedOps.put(tag, new ArrayList<>());
             }
