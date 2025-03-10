@@ -651,7 +651,8 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
                 }
             }
             templateData.put("imports", new ArrayList<>(importSet));
-            String rendered = renderTemplate("service.interface.mustache", templateData);
+            String serviceTemplatePath = this.templateDir + "service.interface.mustache";
+            String rendered = renderTemplate(serviceTemplatePath, templateData);
             String outputDir = outputFolder + File.separator + "services";
             File dir = new File(outputDir);
             if (!dir.exists()) {
