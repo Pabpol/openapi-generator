@@ -82,6 +82,8 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         // Archivos de seguridad
         supportingFiles.add(new SupportingFile("scopes.decorator.mustache", "decorators", "scopes.decorator.ts"));
         supportingFiles.add(new SupportingFile("scope.guard.mustache", "guards", "scope.guard.ts"));
+        supportingFiles.add(new SupportingFile("snakeToCamel.pipe.mustache", "pipes", "SnakeToCamelPipe.ts"));
+        supportingFiles.add(new SupportingFile("customValidation.pipe.mustache", "pipes", "CustomValidationPipe.ts"));
         // Archivo de arranque
 //        supportingFiles.add(new SupportingFile("main.mustache", "src", "main.ts"));
 

@@ -1,39 +1,44 @@
-import { Module } from '@nestjs/common';
+import { Module, Type, DynamicModule } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 {{#requiresScopeGuardGlobal}}import { ScopeGuard } from './src/guards/scope.guard';
-import { Scopes } from './src/decorators/scopes.decorator';
 {{/requiresScopeGuardGlobal}}
 {{#controllers}}import { {{controllerName}}{{controllerSuffix}} } from './src/controllers/{{controllerFileName}}';
 {{/controllers}}
-{{#services}}import { {{serviceName}}{{serviceSuffix}} } from './src/services/{{serviceFileName}}';
-{{/services}}
+
 
 @Module({
     controllers: [
     {{#controllers}}
         {{controllerName}}{{controllerSuffix}},
     {{/controllers}}
-    ],
-    providers: [
-        Reflector,
-        {
-            provide: ScopeGuard,
-            useFactory: (reflector: Reflector) => new ScopeGuard(reflector),
-            inject: [Reflector],
-        },
-        {{#services}}
-        {
-            provide: {{serviceName}}{{serviceSuffix}},
-            useValue: {}, 
-        },
-        {{/services}}
-    ],
-    exports: [
-        Reflector,
-        ScopeGuard,
-        {{#services}}
-        {{serviceName}}{{serviceSuffix}},
-        {{/services}}
     ]
 })
-export class ApiModule {}
+export class ApiModule {
+    static forRoot(provider: Type<any>): DynamicModule {
+        return {
+            module: ApiModule,
+            providers: [
+                {
+                {{#services}}
+                provide: '{{serviceName}}{{serviceSuffix}}Provider',
+                useClass: provider
+                {{/services}}
+                },
+                Reflector,
+                {
+                    provide: ScopeGuard,
+                    useFactory: (reflector: Reflector) => new ScopeGuard(reflector),
+                    inject: [Reflector],
+                }
+
+            ],
+            exports: [
+                {{#services}}
+                '{{serviceName}}{{serviceSuffix}}Provider',
+                {{/services}}
+                Reflector,
+                ScopeGuard,
+            ],
+        };
+      }
+}

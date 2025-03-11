@@ -1,0 +1,50 @@
+import { ArgumentMetadata, BadRequestException, Injectable, PipeTransform } from "@nestjs/common";
+import { plainToInstance } from "class-transformer";
+import { validateSync, ValidationError } from "class-validator";
+
+
+
+@Injectable()
+export class CustomValidationPipe implements PipeTransform<any>{
+
+    transform(value: any, metadata: ArgumentMetadata) {
+        if (!metadata.metatype || !this.toValidate(metadata.metatype)) {
+            return value;
+        }
+
+        const obj = plainToInstance(metadata.metatype, value, {enableImplicitConversion: false});
+        const errors = validateSync(obj, {
+            whitelist: true,
+            forbidNonWhitelisted: true
+        });
+
+        if (errors.length > 0) {
+            const errorMessages = this.formatErrors(errors);
+            throw new BadRequestException( 'Validation failed: ' + errorMessages);
+        }
+
+        return obj;
+
+    }
+    private formatErrors(errors: ValidationError[]): string {
+        return errors.map(error => this.flattenValidationErrors(error)).join(', ');
+
+    }
+    private flattenValidationErrors(error: ValidationError): string[] {
+        let messages: string[] = [];
+        if (error.constraints) {
+            messages = messages.concat(Object.values(error.constraints));
+        }
+        if (error.children && error.children.length > 0) {
+            error.children.forEach(childrenError => {
+                messages = messages.concat(this.flattenValidationErrors(childrenError));
+            });
+        }
+        return messages;
+    }
+    private toValidate(metatype: Function): boolean{
+        const types: Function[] = [String, Boolean, Number, Array, Object];
+        return !types.includes(metatype);
+    }
+
+}

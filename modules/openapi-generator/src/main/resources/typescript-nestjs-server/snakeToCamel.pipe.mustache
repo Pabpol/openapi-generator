@@ -1,0 +1,26 @@
+import { ArgumentMetadata, Injectable, PipeTransform } from "@nestjs/common";
+import { isPlainObject, camelCase} from 'lodash'
+
+@Injectable()
+export class SnakeToCamelPipe implements PipeTransform{
+
+    transform(value: any, metadata: ArgumentMetadata) {
+        return this.convertKeysToCamelCase(value);
+
+    }
+    private convertKeysToCamelCase(obj: any): any {
+        if (Array.isArray(obj)) {
+            return obj.map(value => this.convertKeysToCamelCase(value))
+        }else if (isPlainObject(obj)) {
+            const newObj = {};
+            Object.keys(obj).forEach(key =>{
+                const newKey = camelCase(key);
+                newObj[newKey] = this.convertKeysToCamelCase(obj[key]);
+            });
+            return newObj;
+
+        }
+        return obj
+    }
+
+}

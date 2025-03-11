@@ -1,5 +1,5 @@
 
-import { Controller, Get, Post, Put, Delete, Patch, Body, Param, Query, Headers, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Patch, Body, Param, Query, Headers, UseGuards, Inject } from '@nestjs/common';
 import { {{classname}}ServiceInterface } from '../services/{{classname}}ServiceInterface';
 {{#imports}}import { {{classname}} } from '../models/{{classname}}';
 {{/imports}}
@@ -10,7 +10,7 @@ import { Scopes } from '../decorators/scopes.decorator';
 {{#requiresScopeGuardGlobal}}@UseGuards(ScopeGuard){{/requiresScopeGuardGlobal}}
 @Controller()
 export class {{classname}}Controller {
-constructor(private readonly {{camelCase classname}}service: {{classname}}ServiceInterface) {}
+constructor(@Inject('{{classname}}ServiceInterfaceProvider') private readonly service: {{classname}}ServiceInterface) {}
 
 {{#operations}}
     {{#operation}}
@@ -21,7 +21,7 @@ constructor(private readonly {{camelCase classname}}service: {{classname}}Servic
             @Scopes({{{vendorExtensions.scopes}}})
         {{/vendorExtensions.scopes}}
         async {{operationId}}({{{vendorExtensions.controllerSignatureList}}}): Promise<{{{returnType}}}> {
-        return await this.{{camelCase classname}}service.{{operationId}}({{vendorExtensions.argList}});
+        return await this.service.{{operationId}}({{vendorExtensions.argList}});
         }
     {{/operation}}
 {{/operations}}
