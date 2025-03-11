@@ -651,7 +651,7 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
                 }
             }
             templateData.put("imports", new ArrayList<>(importSet));
-            String serviceTemplatePath = this.templateDir + "service.interface.mustache";
+            String serviceTemplatePath = this.templateDir + "/service.interface.mustache";
             String rendered = renderTemplate(serviceTemplatePath, templateData);
             String outputDir = outputFolder + File.separator + "services";
             File dir = new File(outputDir);
@@ -719,11 +719,21 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         }
     }
     public String getFullTemplateContents(String templateFile) throws IOException {
-        // Construye la ruta completa usando el directorio de templates (embeddedTemplateDir)
-        String fullPath = embeddedTemplateDir + "/" + templateFile;
-        InputStream is = this.getClass().getClassLoader().getResourceAsStream(fullPath);
+        String customTemplatePath = templateFile;
+        File customTemplateFile = new File(customTemplatePath);
+
+        InputStream is = null;
+        if (customTemplateFile.exists()){
+            is = new FileInputStream(customTemplateFile);
+        }
+
         if (is == null) {
-            throw new IOException("Template file not found: " + fullPath);
+            String embeddedPath = embeddedTemplateDir + "/" + templateFile;
+            is = this.getClass().getClassLoader().getResourceAsStream(embeddedPath);
+            if (is == null){
+                throw new IOException("Template file not found: " + templateFile);
+
+            }
         }
         BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
         StringBuilder content = new StringBuilder();
