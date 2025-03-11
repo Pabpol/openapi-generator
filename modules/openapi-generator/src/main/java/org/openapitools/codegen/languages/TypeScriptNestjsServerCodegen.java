@@ -74,6 +74,8 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         supportingFiles.add(new SupportingFile("index.mustache", "", "index.ts"));
         supportingFiles.add(new SupportingFile("scopes.decorator.mustache", "decorators", "scopes.decorator.ts"));
         supportingFiles.add(new SupportingFile("scope.guard.mustache", "guards", "scope.guard.ts"));
+        supportingFiles.add(new SupportingFile("snakeToCamel.pipe.mustache", "pipes", "SnakeToCamelPipe.ts"));
+        supportingFiles.add(new SupportingFile("customValidation.pipe.mustache", "pipes", "CustomValidationPipe.ts"));
 
         apiPackage = "controllers";
         modelPackage = "models";
@@ -91,10 +93,6 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
 
         reservedWords.addAll(Arrays.asList("from", "headers", "request", "response"));
     }
-
-    // ────────────────────────────────────────────────────────────────
-    // Métodos helper para reducir duplicación
-    // ────────────────────────────────────────────────────────────────
 
     private String getStringProperty(String key, String defaultValue) {
         return additionalProperties.containsKey(key)
@@ -557,7 +555,8 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
                 }
             }
             templateData.put("imports", new ArrayList<>(importSet));
-            String rendered = renderTemplate("service.interface.mustache", templateData);
+            String serviceTemplatePath = this.templateDir + "/service.interface.mustache";
+            String rendered = renderTemplate(serviceTemplatePath, templateData);
             String outputDir = outputFolder + File.separator + "services";
             new File(outputDir).mkdirs();
             String outputFilename = outputDir + File.separator + serviceName + ".ts";
@@ -618,10 +617,21 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
     }
 
     public String getFullTemplateContents(String templateFile) throws IOException {
-        String fullPath = embeddedTemplateDir + "/" + templateFile;
-        InputStream is = this.getClass().getClassLoader().getResourceAsStream(fullPath);
+        String customTemplatePath = templateFile;
+        File customTemplateFile = new File(customTemplatePath);
+
+        InputStream is = null;
+        if (customTemplateFile.exists()){
+            is = new FileInputStream(customTemplateFile);
+        }
+
         if (is == null) {
-            throw new IOException("Template file not found: " + fullPath);
+            String embeddedPath = embeddedTemplateDir + "/" + templateFile;
+            is = this.getClass().getClassLoader().getResourceAsStream(embeddedPath);
+            if (is == null){
+                throw new IOException("Template file not found: " + templateFile);
+
+            }
         }
         BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
         StringBuilder content = new StringBuilder();
