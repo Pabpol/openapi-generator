@@ -58,7 +58,6 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
     public TypeScriptNestjsServerCodegen() {
         super();
 
-        // Configurar metadatos y carpeta de salida
         generatorMetadata = GeneratorMetadata.newBuilder(generatorMetadata)
                 .stability(Stability.EXPERIMENTAL)
                 .build();
@@ -69,27 +68,16 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         modelTemplateFiles.put("model.mustache", ".ts");
         apiTemplateFiles.put("controller.mustache", "Controller.ts");
 
-        // Módulo principal que agrupa controladores y servicios
         supportingFiles.add(new SupportingFile("module.mustache", "", "api.module.ts"));
-
-        // Archivos de soporte para configurar el proyecto
         supportingFiles.add(new SupportingFile("package.mustache", "", "package.json"));
         supportingFiles.add(new SupportingFile("tsconfig.json.mustache", "", "tsconfig.json"));
         supportingFiles.add(new SupportingFile("index.mustache", "", "index.ts"));
-//        supportingFiles.add(new SupportingFile("variables.mustache", getIndexDirectory(), "variables.ts"));
-//        supportingFiles.add(new SupportingFile("gitignore", "", ".gitignore"));
-//        supportingFiles.add(new SupportingFile("README.mustache", getIndexDirectory(), "README.md"));
-        // Archivos de seguridad
         supportingFiles.add(new SupportingFile("scopes.decorator.mustache", "decorators", "scopes.decorator.ts"));
         supportingFiles.add(new SupportingFile("scope.guard.mustache", "guards", "scope.guard.ts"));
-        // Archivo de arranque
-//        supportingFiles.add(new SupportingFile("main.mustache", "src", "main.ts"));
 
-        // Definir paquetes internos
         apiPackage = "controllers";
         modelPackage = "models";
 
-        // Registrar opciones CLI
         cliOptions.add(new CliOption(NEST_VERSION, "Version of NestJS to generate code for", nestVersion));
         cliOptions.add(new CliOption(CONTROLLER_SUFFIX, "Suffix for generated controllers", controllerSuffix));
         cliOptions.add(new CliOption(SERVICE_SUFFIX, "Suffix for generated services", serviceSuffix));
@@ -104,6 +92,103 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         reservedWords.addAll(Arrays.asList("from", "headers", "request", "response"));
     }
 
+    // ────────────────────────────────────────────────────────────────
+    // Métodos helper para reducir duplicación
+    // ────────────────────────────────────────────────────────────────
+
+    private String getStringProperty(String key, String defaultValue) {
+        return additionalProperties.containsKey(key)
+                ? additionalProperties.get(key).toString()
+                : defaultValue;
+    }
+
+    private boolean getBooleanProperty(String key, boolean defaultValue) {
+        return additionalProperties.containsKey(key)
+                ? Boolean.parseBoolean(additionalProperties.get(key).toString())
+                : defaultValue;
+    }
+
+    private String getControllerAnnotation(CodegenParameter param) {
+        if (param.isBodyParam) {
+            return "@Body() ";
+        } else if (param.isPathParam) {
+            return "@Param('" + camelize(param.paramName, LOWERCASE_FIRST_CHAR) + "') ";
+        } else if (param.isQueryParam) {
+            return "@Query('" + camelize(param.paramName, LOWERCASE_FIRST_CHAR) + "') ";
+        } else if (param.isHeaderParam) {
+            return "@Headers('" + camelize(param.paramName, LOWERCASE_FIRST_CHAR) + "') ";
+        }
+        return "";
+    }
+
+    private void buildSignaturesForOperation(CodegenOperation op) {
+        if (op.allParams != null && !op.allParams.isEmpty()) {
+            StringBuilder controllerSignature = new StringBuilder();
+            StringBuilder serviceSignature = new StringBuilder();
+            StringBuilder argList = new StringBuilder();
+            int paramCount = op.allParams.size();
+            for (int i = 0; i < paramCount; i++) {
+                CodegenParameter param = op.allParams.get(i);
+                String annotation = getControllerAnnotation(param);
+                controllerSignature.append(annotation)
+                        .append(param.paramName)
+                        .append(": ")
+                        .append(param.dataType);
+                serviceSignature.append(param.paramName)
+                        .append(": ")
+                        .append(param.dataType);
+                argList.append(param.paramName);
+                if (i < paramCount - 1) {
+                    controllerSignature.append(", ");
+                    serviceSignature.append(", ");
+                    argList.append(", ");
+                }
+            }
+            op.vendorExtensions.put("controllerSignatureList", controllerSignature.toString());
+            op.vendorExtensions.put("serviceSignatureList", serviceSignature.toString());
+            op.vendorExtensions.put("argList", argList.toString());
+        } else {
+            op.vendorExtensions.put("controllerSignatureList", "");
+            op.vendorExtensions.put("serviceSignatureList", "");
+            op.vendorExtensions.put("argList", "");
+        }
+    }
+
+    private List<Map<String, Object>> generateEnumVars(List<Object> enumValues, String type) {
+        List<Map<String, Object>> enumVars = new ArrayList<>();
+        for (int i = 0; i < enumValues.size(); i++) {
+            Object enumValue = enumValues.get(i);
+            Map<String, Object> ev = new HashMap<>();
+            ev.put("name", toEnumVarName(enumValue.toString(), type));
+            ev.put("value", Boolean.TRUE.equals(stringEnums)
+                    ? "\"" + enumValue.toString() + "\""
+                    : enumValue.toString());
+            ev.put("last", i == enumValues.size() - 1);
+            enumVars.add(ev);
+        }
+        return enumVars;
+    }
+
+    private Optional<Map<String, String>> createImportForType(String type) {
+        if (type == null) return Optional.empty();
+        String typeName = type;
+        if (typeName.endsWith("[]")) {
+            typeName = typeName.substring(0, typeName.length() - 2);
+        }
+        if (needToImport(typeName)) {
+            Map<String, String> imp = new HashMap<>();
+            imp.put("classname", typeName);
+            imp.put("importPath", "../models");
+            imp.put("filename", toModelFilename(typeName));
+            return Optional.of(imp);
+        }
+        return Optional.empty();
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // Métodos sobrescritos y lógicos de generación
+    // ────────────────────────────────────────────────────────────────
+
     @Override
     public String escapeReservedWord(String name) {
         if ("response".equals(name)) {
@@ -112,13 +197,12 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         return super.escapeReservedWord(name);
     }
 
-    // Método auxiliar para obtener el directorio de índice
     protected String getIndexDirectory() {
         return "src";
     }
 
     private String convertUsingFileNamingConvention(String originalName) {
-        String name = this.removeModelPrefixSuffix(originalName);
+        String name = removeModelPrefixSuffix(originalName);
         if ("kebab-case".equals(fileNaming)) {
             name = dashize(underscore(name));
         } else {
@@ -152,38 +236,26 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
     public String getHelp() {
         return "Generates a NestJS server with support for model validations, scope guard security, and separated service interfaces.";
     }
+
     @Override
     public String toVarName(String name) {
-        // sanitize name
-        name = sanitizeName(name);
-
-        // replace - with _ e.g. created-at => created_at
-        name = name.replaceAll("-", "_");
-
-        // if it's all upper case, do nothing
+        name = sanitizeName(name).replaceAll("-", "_");
         if (name.matches("^[A-Z_]*$"))
             return name;
-
-        // camelize the variable name
-        // pet_id => PetId
         name = camelize(name, LOWERCASE_FIRST_LETTER);
-
-        // for reserved word or word starting with number, append _
         if (isReservedWord(name) || name.matches("^\\d.*"))
             name = escapeReservedWord(name);
-
         return name;
     }
+
     @Override
     public String toModelName(String name) {
         if (name == null || name.isEmpty()) {
             return "DefaultModel";
         }
-        // Si no contiene guiones bajos ni guiones, asumimos que ya está en formato PascalCase
         if (!name.contains("_") && !name.contains("-") && !name.contains(" ")) {
             return name;
         }
-        // Separamos el nombre y capitalizamos cada parte
         String[] parts = name.split("[-_\\s]+");
         StringBuilder sb = new StringBuilder();
         for (String part : parts) {
@@ -201,28 +273,26 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
             return "string";
         }
         if (ModelUtils.isArraySchema(p)) {
-            // Obtener el schema de los elementos del array
             Schema<?> items = ModelUtils.getSchemaItems(p);
-            // Obtener el tipo del elemento (se aplican las transformaciones necesarias, por ejemplo, sufijos)
             String innerType = getTypeDeclaration(items);
-            // En TypeScript se suele usar la notación de corchetes para arrays
             return innerType + "[]";
         } else if (ModelUtils.isMapSchema(p)) {
-            // Si fuera un map, se puede devolver una notación de objeto
             Schema<?> inner = ModelUtils.getAdditionalProperties(p);
             String innerType = getTypeDeclaration(inner);
             return "{ [key: string]: " + innerType + " }";
         }
         return super.getTypeDeclaration(p);
     }
+
     @Override
     public boolean needToImport(String type) {
-        // Lista de tipos que no deben importarse (primitivos en TypeScript)
-        if ("string".equals(type) || "array".equals(type) || "boolean".equals(type) || "number".equals(type) || "any".equals(type) ) {
+        if ("string".equals(type) || "array".equals(type) || "boolean".equals(type)
+                || "number".equals(type) || "any".equals(type)) {
             return false;
         }
         return super.needToImport(type);
     }
+
     @Override
     public void processOpts() {
         super.processOpts();
@@ -235,56 +305,39 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         typeMapping.put("date-time", "string");
         typeMapping.put("object", "any");
 
-
-        if (additionalProperties.containsKey(NEST_VERSION)) {
-            nestVersion = additionalProperties.get(NEST_VERSION).toString();
-        }
+        nestVersion = getStringProperty(NEST_VERSION, nestVersion);
         additionalProperties.put(NEST_VERSION, nestVersion);
 
-        if (additionalProperties.containsKey(CONTROLLER_SUFFIX)) {
-            controllerSuffix = additionalProperties.get(CONTROLLER_SUFFIX).toString();
-        }
+        controllerSuffix = getStringProperty(CONTROLLER_SUFFIX, controllerSuffix);
         additionalProperties.put(CONTROLLER_SUFFIX, controllerSuffix);
 
-        if (additionalProperties.containsKey(SERVICE_SUFFIX)) {
-            serviceSuffix = additionalProperties.get(SERVICE_SUFFIX).toString();
-        }
+        serviceSuffix = getStringProperty(SERVICE_SUFFIX, serviceSuffix);
         additionalProperties.put(SERVICE_SUFFIX, serviceSuffix);
 
-        if (additionalProperties.containsKey(USE_VALIDATIONS)) {
-            useValidations = Boolean.parseBoolean(additionalProperties.get(USE_VALIDATIONS).toString());
-        }
+        useValidations = getBooleanProperty(USE_VALIDATIONS, useValidations);
         additionalProperties.put(USE_VALIDATIONS, useValidations);
 
-        if (additionalProperties.containsKey(USE_SCOPEGUARD)) {
-            useScopeGuard = Boolean.parseBoolean(additionalProperties.get(USE_SCOPEGUARD).toString());
-        }
+        useScopeGuard = getBooleanProperty(USE_SCOPEGUARD, useScopeGuard);
         additionalProperties.put(USE_SCOPEGUARD, useScopeGuard);
 
-        if (additionalProperties.containsKey(GENERATE_SERVICE_INTERFACE)) {
-            generateServiceInterface = Boolean.parseBoolean(additionalProperties.get(GENERATE_SERVICE_INTERFACE).toString());
-        }
+        generateServiceInterface = getBooleanProperty(GENERATE_SERVICE_INTERFACE, generateServiceInterface);
         additionalProperties.put(GENERATE_SERVICE_INTERFACE, generateServiceInterface);
 
-        if (additionalProperties.containsKey(FILE_NAMING)) {
-            fileNaming = additionalProperties.get(FILE_NAMING).toString();
-        }
+        fileNaming = getStringProperty(FILE_NAMING, fileNaming);
         additionalProperties.put(FILE_NAMING, fileNaming);
 
         if (additionalProperties.containsKey(STRING_ENUMS)) {
-            stringEnums = Boolean.parseBoolean(additionalProperties.get(STRING_ENUMS).toString());
+            stringEnums = getBooleanProperty(STRING_ENUMS, false);
         }
         if (openAPI != null && openAPI.getInfo() != null) {
             String title = openAPI.getInfo().getTitle();
             String version = openAPI.getInfo().getVersion();
-            String projectName = title.toLowerCase().replaceAll("[^a-z0-9]+", "-");
-            projectName = projectName.replaceAll("-$", "");
+            String projectName = title.toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("-$", "");
             additionalProperties.put("projectName", projectName);
             additionalProperties.put("projectVersion", version);
         }
         additionalProperties.put(STRING_ENUMS, stringEnums);
 
-        // Inyectar propiedades globales para las plantillas
         additionalProperties.put("useValidations", useValidations);
         additionalProperties.put("useScopeGuard", useScopeGuard);
         additionalProperties.put("controllerSuffix", controllerSuffix);
@@ -295,7 +348,6 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         additionalProperties.put("stringEnums", stringEnums);
     }
 
-    // Post-procesamiento de operaciones: se procesan los detalles de cada operación
     @Override
     public OperationsMap postProcessOperationsWithModels(OperationsMap objs, List<ModelMap> allModels) {
         OperationsMap operationsMap = super.postProcessOperationsWithModels(objs, allModels);
@@ -305,11 +357,9 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
             for (Map<String, String> imp : operationsMap.getImports()) {
                 String originalClassname = imp.get("classname");
                 if (originalClassname != null) {
-                    // Si el nombre contiene el prefijo "Models.", lo removemos
                     if (originalClassname.startsWith("Models.")) {
                         originalClassname = originalClassname.substring("Models.".length());
                     }
-                    // Convertimos a PascalCase (por ejemplo, de "getGuestById205Response" a "GetGuestById205Response")
                     String transformedClassname = toModelName(originalClassname);
                     imp.put("classname", transformedClassname);
                 }
@@ -318,11 +368,11 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
 
         if (operationsMap != null && operationsMap.getOperations() != null) {
             for (CodegenOperation op : operationsMap.getOperations().getOperation()) {
-                if (op.path != null){
+                if (op.path != null) {
                     Pattern pattern = Pattern.compile("\\{([^}]+)\\}");
                     Matcher matcher = pattern.matcher(op.path);
                     StringBuffer sb = new StringBuffer();
-                    while (matcher.find()){
+                    while (matcher.find()) {
                         String inputParam = matcher.group(1);
                         String outputParam = camelize(inputParam, CamelizeOption.LOWERCASE_FIRST_CHAR);
                         matcher.appendReplacement(sb, ":" + outputParam);
@@ -339,85 +389,36 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
                 } else {
                     op.vendorExtensions.put("bodyType", "any");
                 }
-                if (op.returnType == null || op.returnType.isEmpty()) {
-                    op.vendorExtensions.put("returnType", "any");
-                } else {
-                    op.vendorExtensions.put("returnType", op.returnType);
-                }
+                op.vendorExtensions.put("returnType", (op.returnType == null || op.returnType.isEmpty()) ? "any" : op.returnType);
+
                 if (op.authMethods != null && !op.authMethods.isEmpty()) {
                     requiresScopeGuardGlobal = true;
-                    // Tomamos el primer método de autenticación
                     CodegenSecurity sec = op.authMethods.get(0);
                     if (sec.scopes != null && !sec.scopes.isEmpty()) {
                         List<String> scopeValues = new ArrayList<>();
                         for (Map<String, Object> scopeMap : sec.scopes) {
                             Object scope = scopeMap.get("scope");
                             if (scope != null) {
-                                // Envolver cada scope entre comillas simples
                                 scopeValues.add("'" + scope.toString() + "'");
                             }
                         }
-                        // Unir los scopes en formato array: ['scope1', 'scope2']
-                        String scopesFormatted = "[" + String.join(", ", scopeValues) + "]";
-                        op.vendorExtensions.put("scopes", scopesFormatted);
+                        op.vendorExtensions.put("scopes", "[" + String.join(", ", scopeValues) + "]");
                     }
                     op.vendorExtensions.put("requiresScopeGuard", true);
                 } else {
                     op.vendorExtensions.put("requiresScopeGuard", false);
-
                 }
 
-                if (op.allParams != null && !op.allParams.isEmpty()) {
-                    StringBuilder controllerSignatureBuilder = new StringBuilder();
-                    StringBuilder serviceSignatureBuilder = new StringBuilder();
-                    StringBuilder argBuilder = new StringBuilder();
-                    int paramCount = op.allParams.size();
-                    for (int i = 0; i < paramCount; i++) {
-                        CodegenParameter param = op.allParams.get(i);
-                        String controllerAnnotation = "";
-                        if (param.isBodyParam) {
-                            controllerAnnotation = "@Body() ";
-                        } else if (param.isPathParam) {
-                            controllerAnnotation = "@Param('" + camelize(param.paramName, LOWERCASE_FIRST_CHAR) + "') ";
-                        } else if (param.isQueryParam) {
-                            controllerAnnotation = "@Query('" + camelize(param.paramName, LOWERCASE_FIRST_CHAR) + "') ";
-                        } else if (param.isHeaderParam) {
-                            controllerAnnotation = "@Headers('" + camelize(param.paramName, LOWERCASE_FIRST_CHAR) + "') ";
-                        }
-                        // Firma para el controller: incluye decoradores
-                        controllerSignatureBuilder.append(controllerAnnotation)
-                                .append(param.paramName)
-                                .append(": ")
-                                .append(param.dataType);
-                        // Firma para el servicio: solo nombre y tipo, sin decoradores
-                        serviceSignatureBuilder.append(param.paramName)
-                                .append(": ")
-                                .append(param.dataType);
-                        // Lista de argumentos (solo nombres)
-                        argBuilder.append(param.paramName);
-                        if (i < paramCount - 1) {
-                            controllerSignatureBuilder.append(", ");
-                            serviceSignatureBuilder.append(", ");
-                            argBuilder.append(", ");
-                        }
-                    }
-                    op.vendorExtensions.put("controllerSignatureList", controllerSignatureBuilder.toString());
-                    op.vendorExtensions.put("serviceSignatureList", serviceSignatureBuilder.toString());
-                    op.vendorExtensions.put("argList", argBuilder.toString());
-                } else {
-                    op.vendorExtensions.put("controllerSignatureList", "");
-                    op.vendorExtensions.put("serviceSignatureList", "");
-                    op.vendorExtensions.put("argList", "");
-                }
+                buildSignaturesForOperation(op);
             }
         }
-        // Agrupar operaciones por tag y generar contratos de servicio para cada grupo
         Map<String, List<CodegenOperation>> operationsByTag = groupOperationsByTag(operationsMap);
         generateServiceContracts(operationsByTag);
         generateModuleFile(operationsByTag);
         additionalProperties.put("requiresScopeGuardGlobal", requiresScopeGuardGlobal);
         return operationsMap;
     }
+
     @Override
     public Map<String, ModelsMap> postProcessAllModels(Map<String, ModelsMap> objs) {
         Map<String, ModelsMap> models = super.postProcessAllModels(objs);
@@ -427,18 +428,17 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
                 List<Map<String, String>> tsImports = new ArrayList<>();
                 boolean modelHasEnum = false;
                 for (String imp : model.imports) {
-                    // Filtrar los tipos que no queremos importar (por ejemplo, primitivos o genéricos no generados)
-                    if ("List".equals(imp) || "number".equals(imp) || "Map".equalsIgnoreCase(imp)  || "object".equals(imp) || "DateTime".equalsIgnoreCase(imp) || "Date".equalsIgnoreCase(imp) || "any".equalsIgnoreCase(imp)) {
+                    if ("List".equals(imp) || "number".equals(imp) || "Map".equalsIgnoreCase(imp)
+                            || "object".equals(imp) || "DateTime".equalsIgnoreCase(imp) || "Date".equalsIgnoreCase(imp)
+                            || "any".equalsIgnoreCase(imp)) {
                         continue;
                     }
                     Map<String, String> entry = new HashMap<>();
                     if ("UUID".equals(imp)) {
                         entry.put("classname", "UUID");
-                        // Aquí definimos que UUID se importe desde 'crypto'
                         entry.put("importPath", "crypto");
                     } else {
-                        // Para otros tipos, aplicamos la transformación a PascalCase
-                        String transformed = toModelName(imp); // Ej: "GuestDto_companion" → "GuestDtoCompanion"
+                        String transformed = toModelName(imp);
                         entry.put("classname", transformed);
                         entry.put("filename", toModelFilename(transformed));
                         entry.put("importPath", "../models");
@@ -448,15 +448,12 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
                 model.vendorExtensions.put("tsImports", tsImports);
 
                 for (CodegenProperty prop : model.allVars) {
-                    // Si el formato es 'base64', marcar para que se incluya la validación @IsBase64()
                     if (prop.getDataFormat() != null && prop.getDataFormat().equalsIgnoreCase("base64")) {
                         prop.vendorExtensions.put("isBase64", true);
                     }
                     if (prop.isEnum) {
                         modelHasEnum = true;
                     }
-                    // Si el nombre viene en snake_case (p.ej. "customer_id"), se puede transformar a camelCase
-                    // Aquí puedes aplicar tu propia lógica o utilizar una función helper
                     prop.name = toVarName(prop.baseName);
                 }
                 model.vendorExtensions.put("hasEnums", modelHasEnum);
@@ -464,79 +461,38 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         }
         return models;
     }
+
     @Override
     public CodegenModel fromModel(String name, Schema schema) {
-        // Llama al método base para procesar el modelo según la lógica existente
         CodegenModel model = super.fromModel(name, schema);
-
-        // Actualiza el nombre del modelo final (classname) con tu transformación deseada.
-        // Por ejemplo, si el modelo se llama "GuestDto_companion", lo transforma a "GuestDtoCompanion".
         model.classname = toModelName(model.schemaName);
-        // Agregar lógica para enums
         if (schema.getEnum() != null && !schema.getEnum().isEmpty()) {
             model.isEnum = true;
-            List<Object> enumValues = schema.getEnum();
-            List<Map<String, Object>> enumVars = new ArrayList<>();
-            for (int i = 0; i < enumValues.size(); i++) {
-                Object enumValue = enumValues.get(i);
-                Map<String, Object> ev = new HashMap<>();
-                // Convierte el valor en un nombre de variable TS válido.
-                // Por ejemplo: "available" -> "AVAILABLE" o "Available"
-                ev.put("name", toEnumVarName(enumValue.toString(), schema.getType()));
-                // Si se usan string enums, envolver el valor entre comillas.
-                ev.put("value", (Boolean.TRUE.equals(stringEnums) ? "\"" + enumValue.toString() + "\"" : enumValue.toString()));
-                ev.put("last", i == enumValues.size() - 1);
-                enumVars.add(ev);
-            }
-            Map<String, Object> allowableValues = new HashMap<>();
-            allowableValues.put("enumVars", enumVars);
-            model.allowableValues = allowableValues;
+            model.allowableValues = new HashMap<>();
+            model.allowableValues.put("enumVars", generateEnumVars(schema.getEnum(), schema.getType()));
         }
-        // Recorre todas las propiedades (allVars) para actualizar su dataType si es necesario
         for (CodegenProperty prop : model.allVars) {
-            // Si la propiedad hace referencia a otro modelo y su dataType contiene guiones bajos,
-            // se transforma usando toModelName para obtener el nombre final deseado.
             if (prop.dataType != null && prop.dataType.contains("_")) {
                 String transformedDataType = toModelName(prop.dataType);
                 prop.dataType = transformedDataType;
-                // Opcional: también actualizar datatypeWithEnum si aplica
                 prop.datatypeWithEnum = transformedDataType;
             }
         }
-
         return model;
     }
+
     @Override
     public CodegenProperty fromProperty(String name, Schema p) {
         CodegenProperty prop = super.fromProperty(name, p);
         if (p.getEnum() != null && !p.getEnum().isEmpty()) {
             prop.isEnum = true;
-            // Obtiene los valores del enum
-            List<Object> enumValues = p.getEnum();
-            List<Map<String, Object>> enumVars = new ArrayList<>();
-            for (int i = 0; i < enumValues.size(); i++) {
-                Object enumValue = enumValues.get(i);
-                Map<String, Object> ev = new HashMap<>();
-                // Genera un nombre válido para el valor del enum
-                ev.put("name", toEnumVarName(enumValue.toString(), p.getType()));
-                // Si se usa stringEnums, se envuelve el valor entre comillas
-                ev.put("value", (Boolean.TRUE.equals(stringEnums) ? "\"" + enumValue.toString() + "\"" : enumValue.toString()));
-                ev.put("last", i == enumValues.size() - 1);
-                enumVars.add(ev);
-            }
-            // Se asigna la lista de variables generada a allowableValues
-            Map<String, Object> allowableValues = new HashMap<>();
-            allowableValues.put("enumVars", enumVars);
-            prop.allowableValues = allowableValues;
-            // Se asigna un nombre para el enum inline, por ejemplo: "StatusEnum" si la propiedad se llama "status"
+            prop.allowableValues = new HashMap<>();
+            prop.allowableValues.put("enumVars", generateEnumVars(p.getEnum(), p.getType()));
             prop.enumName = toModelName(prop.name) + "Enum";
-            // Esto hará que en el template se utilice el enumName en lugar de la propiedad primitiva
             prop.datatypeWithEnum = prop.enumName;
         }
         return prop;
     }
-
-
 
     @Override
     public CodegenOperation fromOperation(String resourcePath, String httpMethod, Operation operation, List<Server> servers) {
@@ -560,29 +516,12 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
     @Override
     public void postProcessModelProperty(CodegenModel model, CodegenProperty prop) {
         super.postProcessModelProperty(model, prop);
-        if (prop.isEnum) {
-            // Si allowableValues tiene la clave "values", se genera "enumVars"
-            if (prop.allowableValues != null && prop.allowableValues.containsKey("values")) {
-                List<Object> enumValues = (List<Object>) prop.allowableValues.get("values");
-                List<Map<String, Object>> enumVars = new ArrayList<>();
-                for (int i = 0; i < enumValues.size(); i++) {
-                    Object enumValue = enumValues.get(i);
-                    Map<String, Object> ev = new HashMap<>();
-                    ev.put("name", toEnumVarName(enumValue.toString(), prop.dataType));
-                    ev.put("value", (Boolean.TRUE.equals(stringEnums)
-                            ? "\"" + enumValue.toString() + "\""
-                            : enumValue.toString()));
-                    ev.put("last", i == enumValues.size() - 1);
-                    enumVars.add(ev);
-                }
-                // Reemplazar o agregar la clave "enumVars" en allowableValues
-                prop.allowableValues.put("enumVars", enumVars);
-            }
+        if (prop.isEnum && prop.allowableValues != null && prop.allowableValues.containsKey("values")) {
+            List<Object> enumValues = (List<Object>) prop.allowableValues.get("values");
+            prop.allowableValues.put("enumVars", generateEnumVars(enumValues, prop.dataType));
         }
     }
 
-
-    // Agrupa las operaciones por tag. Si no hay tag, se agrupa en "Default"
     protected Map<String, List<CodegenOperation>> groupOperationsByTag(OperationsMap operationsMap) {
         Map<String, List<CodegenOperation>> groupedOps = new LinkedHashMap<>();
         if (operationsMap == null || operationsMap.getOperations() == null) {
@@ -591,80 +530,42 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         for (CodegenOperation op : operationsMap.getOperations().getOperation()) {
             String tag = (op.tags != null && !op.tags.isEmpty()) ? op.tags.get(0).getName() : "Default";
             tag = toModelName(tag);
-            if (!groupedOps.containsKey(tag)) {
-                groupedOps.put(tag, new ArrayList<>());
-            }
-            groupedOps.get(tag).add(op);
+            groupedOps.computeIfAbsent(tag, k -> new ArrayList<>()).add(op);
         }
         return groupedOps;
     }
 
-    // Genera un contrato de servicio (clase abstracta) por cada grupo de operaciones (tag)
     protected void generateServiceContracts(Map<String, List<CodegenOperation>> operationsByTag) {
         for (Map.Entry<String, List<CodegenOperation>> entry : operationsByTag.entrySet()) {
             String tag = entry.getKey();
             List<CodegenOperation> ops = entry.getValue();
             Map<String, Object> templateData = new HashMap<>();
-            // Si el tag no es "Default", usa el tag para el nombre del servicio; de lo contrario, usa "DefaultService".
-            String serviceName;
-            if ("Default".equalsIgnoreCase(tag)) {
-                serviceName = "DefaultServiceApiServiceInterface";
-            } else {
-                serviceName = capitalize(tag) + "ApiServiceInterface";
-            }
+            String serviceName = "Default".equalsIgnoreCase(tag)
+                    ? "DefaultServiceApiServiceInterface"
+                    : capitalize(tag) + "ApiServiceInterface";
             templateData.put("serviceName", serviceName);
             templateData.put("tag", tag);
             templateData.put("operations", ops);
 
             Set<Map<String, String>> importSet = new HashSet<>();
-            for (CodegenOperation op :ops){
-                if (op.returnType != null){
-                    String typeName = op.returnType;
-                    if (typeName.endsWith("[]")){
-                        typeName = typeName.substring(0, typeName.length() - 2);
-                    }
-                    if (needToImport(typeName)){
-                        Map<String, String> imp = new HashMap<>();
-                        imp.put("classname", typeName);
-                        imp.put("importPath", "../models");
-                        imp.put("filename", toModelFilename(typeName));
-                        importSet.add(imp);
-                    }
-
-                }
-                if (op.allParams != null ){
-                    for (CodegenParameter param : op.allParams){
-                        if (param.dataType != null) {
-                            String paramType = param.dataType;
-                            if (paramType.endsWith("[]")){
-                                paramType = paramType.substring(0, paramType.length() - 2);
-                            }
-                            if (needToImport(paramType)){
-                                Map<String, String> imp = new HashMap<>();
-                                imp.put("classname", paramType);
-                                imp.put("importPath", "../models");
-                                imp.put("filename", toModelFilename(paramType));
-                                importSet.add(imp);
-                            }
-                        }
+            for (CodegenOperation op : ops) {
+                createImportForType(op.returnType).ifPresent(importSet::add);
+                if (op.allParams != null) {
+                    for (CodegenParameter param : op.allParams) {
+                        createImportForType(param.dataType).ifPresent(importSet::add);
                     }
                 }
             }
             templateData.put("imports", new ArrayList<>(importSet));
             String rendered = renderTemplate("service.interface.mustache", templateData);
             String outputDir = outputFolder + File.separator + "services";
-            File dir = new File(outputDir);
-            if (!dir.exists()) {
-                dir.mkdirs();
-            }
+            new File(outputDir).mkdirs();
             String outputFilename = outputDir + File.separator + serviceName + ".ts";
             writeToFile(rendered, outputFilename);
             LOGGER.info("Generated service contract for tag '{}': {}", tag, outputFilename);
         }
     }
 
-
-    // Utiliza el motor de plantillas para renderizar un template dado su nombre y datos
     protected String renderTemplate(String templateName, Map<String, Object> templateData) {
         TemplatingExecutor executor = new TemplatingExecutor() {
             @Override
@@ -675,11 +576,11 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
                     throw new RuntimeException(e);
                 }
             }
+
             @Override
             public Path getFullTemplatePath(String templateFile) {
                 return TypeScriptNestjsServerCodegen.this.getFullTemplatePath(templateFile);
             }
-            // Si TemplatingExecutor tiene otros métodos obligatorios, impĺementalos aquí.
         };
         try {
             return getTemplatingEngine().compileTemplate(executor, templateData, templateName);
@@ -688,8 +589,6 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         }
     }
 
-
-    // Método auxiliar para escribir el contenido en un archivo
     protected void writeToFile(String content, String outputFilename) {
         try (FileWriter writer = new FileWriter(outputFilename)) {
             writer.write(content);
@@ -707,7 +606,7 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         String prettierPath = System.getenv("PRETTIER_POST_PROCESS_FILE");
         if (prettierPath != null && !prettierPath.isEmpty()) {
             try {
-                Process process = Runtime.getRuntime().exec(new String[] { prettierPath, "--write", file.getAbsolutePath() });
+                Process process = Runtime.getRuntime().exec(new String[]{prettierPath, "--write", file.getAbsolutePath()});
                 int exitCode = process.waitFor();
                 if (exitCode != 0) {
                     LOGGER.error("Prettier returned error code {} for file: {}", exitCode, file.getAbsolutePath());
@@ -717,8 +616,8 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
             }
         }
     }
+
     public String getFullTemplateContents(String templateFile) throws IOException {
-        // Construye la ruta completa usando el directorio de templates (embeddedTemplateDir)
         String fullPath = embeddedTemplateDir + "/" + templateFile;
         InputStream is = this.getClass().getClassLoader().getResourceAsStream(fullPath);
         if (is == null) {
@@ -737,6 +636,7 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
     public Path getFullTemplatePath(String templateFile) {
         return new File(embeddedTemplateDir, templateFile).toPath();
     }
+
     private void generateModuleFile(Map<String, List<CodegenOperation>> operationsByTag) {
         List<Map<String, Object>> controllers = additionalProperties.containsKey("controllers")
                 ? (List<Map<String, Object>>) additionalProperties.get("controllers")
@@ -745,29 +645,22 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
                 ? (List<Map<String, Object>>) additionalProperties.get("services")
                 : new ArrayList<>();
 
-        // Por cada grupo (tag) se asume que se genera un controlador y un servicio
         for (String tag : operationsByTag.keySet()) {
-            // Por ejemplo, el nombre del servicio se deriva del tag (capitalizado)
             String serviceName = capitalize(tag);
-            String controllerName = serviceName; // O puede tener un prefijo o sufijo diferente
-
-            // Genera los nombres de archivo (convierte a la convención deseada)
-
-            Map<String, Object> ctrl = new java.util.HashMap<>();
+            String controllerName = serviceName;
+            Map<String, Object> ctrl = new HashMap<>();
             ctrl.put("controllerName", controllerName);
-            ctrl.put("controllerSuffix", "Api" + additionalProperties.get(CONTROLLER_SUFFIX)); // por ejemplo, "Controller"
-            ctrl.put("controllerFileName", controllerName + "Api" + additionalProperties.get(CONTROLLER_SUFFIX)); // o el sufijo que uses para archivos de controlador
+            ctrl.put("controllerSuffix", "Api" + additionalProperties.get(CONTROLLER_SUFFIX));
+            ctrl.put("controllerFileName", controllerName + "Api" + additionalProperties.get(CONTROLLER_SUFFIX));
             controllers.add(ctrl);
 
-            Map<String, Object> serv = new java.util.HashMap<>();
+            Map<String, Object> serv = new HashMap<>();
             serv.put("serviceName", serviceName);
-            serv.put("serviceSuffix", "Api" + additionalProperties.get(SERVICE_SUFFIX) + "Interface"); // por ejemplo, "ApiServiceInterface"
-            serv.put("serviceFileName", serviceName + "Api" + additionalProperties.get(SERVICE_SUFFIX) + "Interface"); // o el sufijo correspondiente
+            serv.put("serviceSuffix", "Api" + additionalProperties.get(SERVICE_SUFFIX) + "Interface");
+            serv.put("serviceFileName", serviceName + "Api" + additionalProperties.get(SERVICE_SUFFIX) + "Interface");
             services.add(serv);
         }
         additionalProperties.put("controllers", controllers);
         additionalProperties.put("services", services);
     }
-
-
 }
