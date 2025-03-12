@@ -1,5 +1,6 @@
 
-import { Controller, Get, Post, Put, Delete, Patch, Body, Param, Query, Headers, UseGuards, Inject } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Patch, Body, Param, Query, Headers, UseGuards, Inject {{#pipeImports}}{{classname}}{{/pipeImports}}
+} from '@nestjs/common';
 import { {{classname}}ServiceInterface } from '../services/{{classname}}ServiceInterface';
 {{#imports}}import { {{classname}} } from '../models/{{classname}}';
 {{/imports}}

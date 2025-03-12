@@ -107,16 +107,18 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
     }
 
     private String getControllerAnnotation(CodegenParameter param) {
+        String annotation = "";
+        String pipes = getPipesForParam(param);
         if (param.isBodyParam) {
-            return "@Body() ";
+            annotation = "@Body() ";
         } else if (param.isPathParam) {
-            return "@Param('" + camelize(param.paramName, LOWERCASE_FIRST_CHAR) + "') ";
+            annotation = "@Param('" + camelize(param.paramName, LOWERCASE_FIRST_CHAR) + "'" + pipes + ") ";
         } else if (param.isQueryParam) {
-            return "@Query('" + camelize(param.paramName, LOWERCASE_FIRST_CHAR) + "') ";
+            annotation = "@Query('" + camelize(param.paramName, LOWERCASE_FIRST_CHAR) + "'" + pipes + ") ";
         } else if (param.isHeaderParam) {
-            return "@Headers('" + camelize(param.paramName, LOWERCASE_FIRST_CHAR) + "') ";
+            annotation = "@Headers('" + camelize(param.paramName, LOWERCASE_FIRST_CHAR) + "'" + pipes + ") ";
         }
-        return "";
+        return annotation;
     }
 
     private void buildSignaturesForOperation(CodegenOperation op) {
@@ -181,6 +183,51 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
             return Optional.of(imp);
         }
         return Optional.empty();
+    }
+
+    private String getPipesForParam(CodegenParameter param) {
+        List<String> pipes = new ArrayList<>();
+
+        if (param.isPathParam && param.dataFormat != null && param.dataFormat.equalsIgnoreCase("uuid")) {
+            pipes.add("ParseUUIDPipe()");
+            registerPipeImport("ParseUUIDPipe", "@nestjs/common");
+        }
+        if (param.isQueryParam && "number".equalsIgnoreCase(param.dataType)) {
+            pipes.add("ParseIntPipe()");
+            registerPipeImport("ParseIntPipe", "@nestjs/common");
+
+        }
+        if (param.vendorExtensions.containsKey("customPipes")) {
+            Object custom = param.vendorExtensions.get("customPipes");
+            if (custom instanceof List<?>) {
+                for (Object o : (List<?>) custom) {
+                    if (o != null) {
+                        pipes.add(o.toString());
+                    }
+                }
+            }
+        }
+        if (pipes.isEmpty()) {
+            return "";
+        }
+        return ", " + String.join(", ", pipes);
+    }
+
+    private void registerPipeImport(String pipeName, String importPath) {
+        // Obtén o crea la lista de importaciones para pipes en additionalProperties
+        List<Map<String, String>> pipeImports = (List<Map<String, String>>) additionalProperties.get("pipeImports");
+        if (pipeImports == null) {
+            pipeImports = new ArrayList<>();
+            additionalProperties.put("pipeImports", pipeImports);
+        }
+        // Agrega la importación solo si no se agregó previamente
+        boolean exists = pipeImports.stream().anyMatch(entry -> pipeName.equals(entry.get("classname")));
+        if (!exists) {
+            Map<String, String> entry = new HashMap<>();
+            entry.put("classname", pipeName);
+            entry.put("importPath", importPath);
+            pipeImports.add(entry);
+        }
     }
 
     // ────────────────────────────────────────────────────────────────
@@ -285,7 +332,7 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
     @Override
     public boolean needToImport(String type) {
         if ("string".equals(type) || "array".equals(type) || "boolean".equals(type)
-                || "number".equals(type) || "any".equals(type)) {
+                || "number".equals(type) || "any".equals(type) || "uuid".equalsIgnoreCase(type)) {
             return false;
         }
         return super.needToImport(type);
@@ -302,6 +349,7 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         typeMapping.put("date", "string");
         typeMapping.put("date-time", "string");
         typeMapping.put("object", "any");
+        typeMapping.put("UUID", "string");
 
         nestVersion = getStringProperty(NEST_VERSION, nestVersion);
         additionalProperties.put(NEST_VERSION, nestVersion);
@@ -432,15 +480,11 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
                         continue;
                     }
                     Map<String, String> entry = new HashMap<>();
-                    if ("UUID".equals(imp)) {
-                        entry.put("classname", "UUID");
-                        entry.put("importPath", "crypto");
-                    } else {
-                        String transformed = toModelName(imp);
-                        entry.put("classname", transformed);
-                        entry.put("filename", toModelFilename(transformed));
-                        entry.put("importPath", "../models");
-                    }
+                    String transformed = toModelName(imp);
+                    entry.put("classname", transformed);
+                    entry.put("filename", toModelFilename(transformed));
+                    entry.put("importPath", "../models");
+
                     tsImports.add(entry);
                 }
                 model.vendorExtensions.put("tsImports", tsImports);
@@ -555,7 +599,7 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
                 }
             }
             templateData.put("imports", new ArrayList<>(importSet));
-            String serviceTemplatePath = this.templateDir + "/service.interface.mustache";
+            String serviceTemplatePath = "/service.interface.mustache";
             String rendered = renderTemplate(serviceTemplatePath, templateData);
             String outputDir = outputFolder + File.separator + "services";
             new File(outputDir).mkdirs();
