@@ -1,2 +1,9 @@
 export * from './api.module';
 export * from './src/guards/scope.guard';
+{{#services}}export * from './src/services/{{serviceFileName}}';
+{{/services}}
+{{#controllers}}export * from './src/controllers/{{controllerFileName}}';
+{{/controllers}}
+export * from './src/pipes/CustomValidationPipe';
+export * from './src/pipes/SnakeToCamelPipe';
+export * from './src/constants/provider.tokens';

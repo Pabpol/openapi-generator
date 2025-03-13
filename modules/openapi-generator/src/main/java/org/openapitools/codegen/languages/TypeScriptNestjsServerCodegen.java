@@ -76,6 +76,8 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         supportingFiles.add(new SupportingFile("scope.guard.mustache", "guards", "scope.guard.ts"));
         supportingFiles.add(new SupportingFile("snakeToCamel.pipe.mustache", "pipes", "SnakeToCamelPipe.ts"));
         supportingFiles.add(new SupportingFile("customValidation.pipe.mustache", "pipes", "CustomValidationPipe.ts"));
+        supportingFiles.add(new SupportingFile("npmignore.mustache", "", ".npmignore"));
+        supportingFiles.add(new SupportingFile("provider.tokens.mustache", "constants", "provider.tokens.ts"));
 
         apiPackage = "controllers";
         modelPackage = "models";
@@ -189,11 +191,11 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         List<String> pipes = new ArrayList<>();
 
         if (param.isPathParam && param.dataFormat != null && param.dataFormat.equalsIgnoreCase("uuid")) {
-            pipes.add("ParseUUIDPipe()");
+            pipes.add("new ParseUUIDPipe()");
             registerPipeImport("ParseUUIDPipe", "@nestjs/common");
         }
         if (param.isQueryParam && "number".equalsIgnoreCase(param.dataType)) {
-            pipes.add("ParseIntPipe()");
+            pipes.add("new ParseIntPipe()");
             registerPipeImport("ParseIntPipe", "@nestjs/common");
 
         }
@@ -414,6 +416,7 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
 
         if (operationsMap != null && operationsMap.getOperations() != null) {
             for (CodegenOperation op : operationsMap.getOperations().getOperation()) {
+                additionalProperties.put("operationTokenName", op.baseName.replaceAll("([a-z])([A-Z])","$1_$2").toUpperCase() + "_TOKEN");
                 if (op.path != null) {
                     Pattern pattern = Pattern.compile("\\{([^}]+)\\}");
                     Matcher matcher = pattern.matcher(op.path);
@@ -599,7 +602,7 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
                 }
             }
             templateData.put("imports", new ArrayList<>(importSet));
-            String serviceTemplatePath = "/service.interface.mustache";
+            String serviceTemplatePath = this.templateDir + "/service.interface.mustache";
             String rendered = renderTemplate(serviceTemplatePath, templateData);
             String outputDir = outputFolder + File.separator + "services";
             new File(outputDir).mkdirs();
@@ -712,6 +715,7 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
             serv.put("serviceName", serviceName);
             serv.put("serviceSuffix", "Api" + additionalProperties.get(SERVICE_SUFFIX) + "Interface");
             serv.put("serviceFileName", serviceName + "Api" + additionalProperties.get(SERVICE_SUFFIX) + "Interface");
+            serv.put("serviceToken", serviceName.replaceAll("([a-z])([A-Z])", "$1_$2").toUpperCase()+"_TOKEN");
             services.add(serv);
         }
         additionalProperties.put("controllers", controllers);

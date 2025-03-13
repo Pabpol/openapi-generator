@@ -2,6 +2,7 @@
 import { Controller, Get, Post, Put, Delete, Patch, Body, Param, Query, Headers, UseGuards, Inject {{#pipeImports}}{{classname}}{{/pipeImports}}
 } from '@nestjs/common';
 import { {{classname}}ServiceInterface } from '../services/{{classname}}ServiceInterface';
+import { {{operationTokenName}} } from '../constants/provider.tokens';
 {{#imports}}import { {{classname}} } from '../models/{{classname}}';
 {{/imports}}
 {{#requiresScopeGuardGlobal}}import { ScopeGuard } from '../guards/scope.guard';
@@ -11,7 +12,7 @@ import { Scopes } from '../decorators/scopes.decorator';
 {{#requiresScopeGuardGlobal}}@UseGuards(ScopeGuard){{/requiresScopeGuardGlobal}}
 @Controller()
 export class {{classname}}Controller {
-constructor(@Inject('{{classname}}ServiceInterfaceProvider') private readonly service: {{classname}}ServiceInterface) {}
+constructor(@Inject({{operationTokenName}}) private readonly service: {{classname}}ServiceInterface) {}
 
 {{#operations}}
     {{#operation}}

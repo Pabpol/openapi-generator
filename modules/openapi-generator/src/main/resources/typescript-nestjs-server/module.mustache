@@ -1,4 +1,4 @@
-import { Module, Type, DynamicModule } from '@nestjs/common';
+import { Module, Type, DynamicModule, Provider } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 {{#requiresScopeGuardGlobal}}import { ScopeGuard } from './src/guards/scope.guard';
 {{/requiresScopeGuardGlobal}}
@@ -14,31 +14,41 @@ import { Reflector } from '@nestjs/core';
     ]
 })
 export class ApiModule {
-    static forRoot(provider: Type<any>): DynamicModule {
-        return {
-            module: ApiModule,
-            providers: [
-                {
-                {{#services}}
-                provide: '{{serviceName}}{{serviceSuffix}}Provider',
-                useClass: provider
-                {{/services}}
-                },
-                Reflector,
-                {
-                    provide: ScopeGuard,
-                    useFactory: (reflector: Reflector) => new ScopeGuard(reflector),
-                    inject: [Reflector],
-                }
+  static forRoot(options: {
+    providers: Array<{
+      token: string;
+      implementation: Type<any>;
+    }>;
+    imports?: any[];
+  }): DynamicModule {
+    const moduleProviders: Provider[] = [
+      Reflector,
+      {
+        provide: ScopeGuard,
+        useFactory: (reflector: Reflector) => new ScopeGuard(reflector),
+        inject: [Reflector],
+      },
+    ];
 
-            ],
-            exports: [
-                {{#services}}
-                '{{serviceName}}{{serviceSuffix}}Provider',
-                {{/services}}
-                Reflector,
-                ScopeGuard,
-            ],
-        };
-      }
+    const moduleExports: any[] = [
+      Reflector,
+      ScopeGuard,
+    ];
+
+    // Agregar cada provider dinámicamente
+    options.providers.forEach(provider => {
+      moduleProviders.push({
+        provide: provider.token,
+        useExisting: provider.implementation
+      });
+      moduleExports.push(provider.token);
+    });
+
+    return {
+      module: ApiModule,
+      imports: options.imports || [],
+      providers: moduleProviders,
+      exports: moduleExports,
+    };
+  }
 }
