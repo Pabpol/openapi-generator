@@ -1,12 +1,40 @@
+import { Type as TransformType } from 'class-transformer';
 {{#vendorExtensions.tsImports}}import { {{classname}} } from '{{importPath}}{{#filename}}/{{filename}}{{/filename}}';
 {{/vendorExtensions.tsImports}}
-{{#useValidations}}import { IsOptional, IsNotEmpty, IsString, IsNumber, IsUUID, IsBase64, MinLength, MaxLength, Matches, Min, Max } from 'class-validator';
+{{#useValidations}}import { IsOptional, IsObject, IsNotEmpty, IsEnum, IsString, IsNumber, IsUUID, IsBase64, IsDateString, MinLength, MaxLength, Matches, Min, Max, IsBoolean, IsArray, ArrayMinSize, ArrayMaxSize, ValidateNested, registerDecorator } from 'class-validator';
 {{/useValidations}}
 export class {{classname}}{{#allParents}}{{#-first}} extends {{/-first}}{{{.}}}{{^-last}}, {{/-last}}{{/allParents}} {
 {{>modelGenericAdditionalProperties}}
 {{#allVars}}
-    {{#useValidations}}{{#isRequired}}@IsNotEmpty(){{/isRequired}}{{#isString}}@IsString(){{#isUuid}}@IsUUID(){{/isUuid}}{{#minLength}}@MinLength({{minLength}}){{/minLength}}{{#maxLength}}@MaxLength({{maxLength}}){{/maxLength}}{{#pattern}}@Matches(/{{pattern}}/){{/pattern}}{{/isString}}{{#isNumber}}@IsNumber(){{#minimum}}@Min({{minimum}}){{/minimum}}{{#maximum}}@Max({{maximum}}){{/maximum}}{{/isNumber}}{{#vendorExtensions.isBase64}}@IsBase64(){{/vendorExtensions.isBase64}}{{#isOptional}}@IsOptional(){{/isOptional}}{{/useValidations}}
-    public {{#hasSanitizedName}}{{{name}}}{{/hasSanitizedName}}{{^hasSanitizedName}}{{{name}}}{{/hasSanitizedName}}{{#required}}!{{/required}}{{^required}}?{{/required}}: {{#isEnum}}{{#isInnerEnum}}{{classname}}.{{/isInnerEnum}}{{{datatypeWithEnum}}}{{/isEnum}}{{^isEnum}}{{{dataType}}}{{/isEnum}}{{#isNullable}} | null{{/isNullable}};
+
+    {{#isModel}}@ValidateNested()
+    @TransformType(() => {{dataType}}){{/isModel}}{{#useValidations}}{{#isRequired}}@IsNotEmpty()
+    {{/isRequired}}{{#isEnum}}{{#allowableValues}}@IsEnum(['{{#enumVars}}{{value}}{{^-last}}', '{{/-last}}{{/enumVars}}'], {
+      message: '{{name}} must be one of the following values: {{#enumVars}}{{value}}{{^-last}}, {{/-last}}{{/enumVars}}'
+    }){{/allowableValues}}
+    {{/isEnum}}{{^isEnum}}{{#allowableValues}}@IsEnum({{dataType}}, { message: `{{name}} must be one of the following values: ${Object.values({{dataType}}).join(", ")}` }){{/allowableValues}}
+    {{/isEnum}}{{#isBoolean}}@IsBoolean()
+    {{/isBoolean}}{{#isString}}@IsString()
+    {{#isUuid}}@IsUUID()
+    {{/isUuid}}{{#isDate}}@IsDateString()
+    {{/isDate}}{{#isDateTime}}@IsDateString()
+    {{/isDateTime}}{{#minLength}}@MinLength({{minLength}})
+    {{/minLength}}{{#maxLength}}@MaxLength({{maxLength}})
+    {{/maxLength}}{{#vendorExtensions.x-pattern-formatted}}@Matches({{vendorExtensions.x-pattern-formatted}})
+    {{/vendorExtensions.x-pattern-formatted}}{{/isString}}{{#isNumber}}@IsNumber()
+    {{#minimum}}@Min({{minimum}})
+    {{/minimum}}{{#maximum}}@Max({{maximum}})
+    {{/maximum}}{{/isNumber}}{{#isArray}}@IsArray()
+    {{#minItems}}@ArrayMinSize({{minItems}})
+    {{/minItems}}{{#maxItems}}@ArrayMaxSize({{maxItems}})
+    {{/maxItems}}{{/isArray}}{{#isArray}}{{#items}}{{#isModel}}@ValidateNested({ each: true })
+    @TransformType(() => {{dataType}}){{/isModel}}
+    {{/items}}
+    {{/isArray}}{{#vendorExtensions.x-is-base64}}@IsBase64()
+    {{/vendorExtensions.x-is-base64}}{{#vendorExtensions.isBase64}}@IsBase64()
+    {{/vendorExtensions.isBase64}}{{#isOptional}}@IsOptional()
+    {{/isOptional}}{{#isMap}}@IsObject()
+    {{/isMap}}{{/useValidations}}public {{#hasSanitizedName}}{{{name}}}{{/hasSanitizedName}}{{^hasSanitizedName}}{{{name}}}{{/hasSanitizedName}}{{#required}}!{{/required}}{{^required}}?{{/required}}: {{#isEnum}}{{#isInnerEnum}}{{classname}}.{{/isInnerEnum}}{{{datatypeWithEnum}}}{{/isEnum}}{{^isEnum}}{{#vendorExtensions.x-is-base64}}string{{/vendorExtensions.x-is-base64}}{{^vendorExtensions.x-is-base64}}{{{dataType}}}{{/vendorExtensions.x-is-base64}}{{/isEnum}}{{#isNullable}} | null{{/isNullable}};
 {{/allVars}}
 }
 {{>modelGenericEnums}}

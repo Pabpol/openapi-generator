@@ -1,6 +1,4 @@
-
-import { Controller, Get, Post, Put, Delete, Patch, Body, Param, Query, Headers, UseGuards, Inject {{#pipeImports}}{{classname}}{{/pipeImports}}
-} from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Patch, Body, Param, Query, Headers, UseGuards, Inject, UseInterceptors, UsePipes} from '@nestjs/common';
 import { {{classname}}ServiceInterface } from '../services/{{classname}}ServiceInterface';
 import { {{operationTokenName}} } from '../constants/provider.tokens';
 {{#imports}}import { {{classname}} } from '../models/{{classname}}';
@@ -8,9 +6,14 @@ import { {{operationTokenName}} } from '../constants/provider.tokens';
 {{#requiresScopeGuardGlobal}}import { ScopeGuard } from '../guards/scope.guard';
 import { Scopes } from '../decorators/scopes.decorator';
 {{/requiresScopeGuardGlobal}}
+import { SnakeToCamelPipe } from '../pipes/SnakeToCamelPipe';
+import { CustomValidationPipe } from '../pipes/CustomValidationPipe';
+import { CamelToSnakePipe } from '../pipes/CamelToSnakePipe';
 
 {{#requiresScopeGuardGlobal}}@UseGuards(ScopeGuard){{/requiresScopeGuardGlobal}}
 @Controller()
+@UsePipes(new SnakeToCamelPipe(), new CustomValidationPipe())
+@UseInterceptors(new CamelToSnakePipe())
 export class {{classname}}Controller {
 constructor(@Inject({{operationTokenName}}) private readonly service: {{classname}}ServiceInterface) {}
 

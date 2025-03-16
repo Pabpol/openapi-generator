@@ -1,4 +1,4 @@
-export * from './api.module';
+export * from './src/api.module';
 export * from './src/guards/scope.guard';
 {{#services}}export * from './src/services/{{serviceFileName}}';
 {{/services}}
@@ -7,3 +7,6 @@ export * from './src/guards/scope.guard';
 export * from './src/pipes/CustomValidationPipe';
 export * from './src/pipes/SnakeToCamelPipe';
 export * from './src/constants/provider.tokens';
+{{#models}}
+export * from './src/models/{{model.classname}}';
+{{/models}}

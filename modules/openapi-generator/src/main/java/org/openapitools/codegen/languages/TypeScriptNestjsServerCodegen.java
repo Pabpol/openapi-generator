@@ -2,9 +2,16 @@ package org.openapitools.codegen.languages;
 
 import io.swagger.v3.oas.models.Operation;
 import io.swagger.v3.oas.models.media.Schema;
-import io.swagger.v3.oas.models.responses.ApiResponse;
 import io.swagger.v3.oas.models.servers.Server;
-import org.openapitools.codegen.*;
+import org.openapitools.codegen.CliOption;
+import org.openapitools.codegen.CodegenConfig;
+import org.openapitools.codegen.CodegenModel;
+import org.openapitools.codegen.CodegenOperation;
+import org.openapitools.codegen.CodegenParameter;
+import org.openapitools.codegen.CodegenProperty;
+import org.openapitools.codegen.CodegenSecurity;
+import org.openapitools.codegen.DefaultCodegen;
+import org.openapitools.codegen.SupportingFile;
 import org.openapitools.codegen.api.TemplatingExecutor;
 import org.openapitools.codegen.meta.GeneratorMetadata;
 import org.openapitools.codegen.meta.Stability;
@@ -16,18 +23,34 @@ import org.openapitools.codegen.utils.ModelUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.apache.commons.lang3.StringUtils.capitalize;
-import static org.openapitools.codegen.languages.TypeScriptNestjsClientCodegen.SERVICE_FILE_SUFFIX;
 import static org.openapitools.codegen.utils.CamelizeOption.LOWERCASE_FIRST_CHAR;
 import static org.openapitools.codegen.utils.CamelizeOption.LOWERCASE_FIRST_LETTER;
-import static org.openapitools.codegen.utils.StringUtils.*;
+import static org.openapitools.codegen.utils.StringUtils.camelize;
+import static org.openapitools.codegen.utils.StringUtils.dashize;
+import static org.openapitools.codegen.utils.StringUtils.underscore;
 
 public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements CodegenConfig {
     private final Logger LOGGER = LoggerFactory.getLogger(TypeScriptNestjsServerCodegen.class);
@@ -75,6 +98,7 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         supportingFiles.add(new SupportingFile("scopes.decorator.mustache", "decorators", "scopes.decorator.ts"));
         supportingFiles.add(new SupportingFile("scope.guard.mustache", "guards", "scope.guard.ts"));
         supportingFiles.add(new SupportingFile("snakeToCamel.pipe.mustache", "pipes", "SnakeToCamelPipe.ts"));
+        supportingFiles.add(new SupportingFile("camelToSnake.pipe.mustache", "pipes", "CamelToSnakePipe.ts"));
         supportingFiles.add(new SupportingFile("customValidation.pipe.mustache", "pipes", "CustomValidationPipe.ts"));
         supportingFiles.add(new SupportingFile("npmignore.mustache", "", ".npmignore"));
         supportingFiles.add(new SupportingFile("provider.tokens.mustache", "constants", "provider.tokens.ts"));
@@ -334,7 +358,7 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
     @Override
     public boolean needToImport(String type) {
         if ("string".equals(type) || "array".equals(type) || "boolean".equals(type)
-                || "number".equals(type) || "any".equals(type) || "uuid".equalsIgnoreCase(type)) {
+                || "number".equals(type) || "any".equals(type) || "uuid".equalsIgnoreCase(type) || "integer".equalsIgnoreCase(type)) {
             return false;
         }
         return super.needToImport(type);
@@ -352,6 +376,7 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         typeMapping.put("date-time", "string");
         typeMapping.put("object", "any");
         typeMapping.put("UUID", "string");
+        typeMapping.put("boolean", "boolean");
 
         nestVersion = getStringProperty(NEST_VERSION, nestVersion);
         additionalProperties.put(NEST_VERSION, nestVersion);
@@ -529,6 +554,19 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
     @Override
     public CodegenProperty fromProperty(String name, Schema p) {
         CodegenProperty prop = super.fromProperty(name, p);
+        if (prop.isNumber) {
+            if (p.getMinimum() != null) {
+                prop.minimum = p.getMinimum().toString();
+            }
+            if (p.getMaximum() != null) {
+                prop.maximum = p.getMaximum().toString();
+            }
+        }
+        if (p.getFormat() != null && p.getFormat().equals("byte")) {
+            prop.dataType = "string";
+            prop.baseType = "string";
+            prop.vendorExtensions.put("isByteArray", true);
+        }
         if (p.getEnum() != null && !p.getEnum().isEmpty()) {
             prop.isEnum = true;
             prop.allowableValues = new HashMap<>();
@@ -561,6 +599,30 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
     @Override
     public void postProcessModelProperty(CodegenModel model, CodegenProperty prop) {
         super.postProcessModelProperty(model, prop);
+
+        if (prop.isDouble || prop.isFloat || prop.isInteger ||
+                prop.isLong || prop.isShort || prop.isUnboundedInteger) {
+            prop.isNumber = true;
+        }
+        if (prop.isDate || prop.isDateTime) {
+            prop.isString = true;
+        }
+        if ("byte".equals(prop.getFormat())) {
+            // Cambiar el tipo a string
+            prop.dataType = "string";
+            prop.baseType = "string";
+            prop.isByteArray = false;
+            prop.vendorExtensions.put("x-is-base64", true);
+
+            // Eliminar importaciones que no existen
+            if (model.imports != null) {
+                model.imports.remove("ByteArray");
+            }
+        }
+        if (prop.pattern != null && !prop.pattern.isEmpty()) {
+            // Almacenar el patrón sin modificar para usarlo en @Matches
+            prop.vendorExtensions.put("x-pattern-formatted", prop.pattern);
+        }
         if (prop.isEnum && prop.allowableValues != null && prop.allowableValues.containsKey("values")) {
             List<Object> enumValues = (List<Object>) prop.allowableValues.get("values");
             prop.allowableValues.put("enumVars", generateEnumVars(enumValues, prop.dataType));

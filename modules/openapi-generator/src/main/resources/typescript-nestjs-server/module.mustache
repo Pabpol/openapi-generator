@@ -1,9 +1,12 @@
 import { Module, Type, DynamicModule, Provider } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-{{#requiresScopeGuardGlobal}}import { ScopeGuard } from './src/guards/scope.guard';
+{{#requiresScopeGuardGlobal}}import { ScopeGuard } from './guards/scope.guard';
 {{/requiresScopeGuardGlobal}}
-{{#controllers}}import { {{controllerName}}{{controllerSuffix}} } from './src/controllers/{{controllerFileName}}';
+{{#controllers}}import { {{controllerName}}{{controllerSuffix}} } from './controllers/{{controllerFileName}}';
 {{/controllers}}
+import { SnakeToCamelPipe } from './pipes/SnakeToCamelPipe';
+import { CustomValidationPipe } from './pipes/CustomValidationPipe';
+import { CamelToSnakePipe } from './pipes/CamelToSnakePipe';
 
 
 @Module({
@@ -28,14 +31,19 @@ export class ApiModule {
         useFactory: (reflector: Reflector) => new ScopeGuard(reflector),
         inject: [Reflector],
       },
+      SnakeToCamelPipe,
+      CustomValidationPipe,
+      CamelToSnakePipe
     ];
 
     const moduleExports: any[] = [
       Reflector,
       ScopeGuard,
+      SnakeToCamelPipe,
+      CustomValidationPipe,
+      CamelToSnakePipe
     ];
 
-    // Agregar cada provider dinámicamente
     options.providers.forEach(provider => {
       moduleProviders.push({
         provide: provider.token,
