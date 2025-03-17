@@ -48,6 +48,7 @@ import java.util.regex.Pattern;
 import static org.apache.commons.lang3.StringUtils.capitalize;
 import static org.openapitools.codegen.utils.CamelizeOption.LOWERCASE_FIRST_CHAR;
 import static org.openapitools.codegen.utils.CamelizeOption.LOWERCASE_FIRST_LETTER;
+import static org.openapitools.codegen.utils.CamelizeOption.UPPERCASE_FIRST_CHAR;
 import static org.openapitools.codegen.utils.StringUtils.camelize;
 import static org.openapitools.codegen.utils.StringUtils.dashize;
 import static org.openapitools.codegen.utils.StringUtils.underscore;
@@ -600,6 +601,15 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
     public void postProcessModelProperty(CodegenModel model, CodegenProperty prop) {
         super.postProcessModelProperty(model, prop);
 
+        if (prop.isArray && prop.items != null && prop.items.isModel) {
+            prop.items.dataType = camelize(prop.items.dataType, UPPERCASE_FIRST_CHAR);
+        }
+
+        if (prop.dataType != null && prop.dataType.contains("_")) {
+            String transformedDataType = toModelName(prop.dataType);
+            prop.dataType = transformedDataType;
+            prop.datatypeWithEnum = transformedDataType;
+        }
         if (prop.isDouble || prop.isFloat || prop.isInteger ||
                 prop.isLong || prop.isShort || prop.isUnboundedInteger) {
             prop.isNumber = true;
