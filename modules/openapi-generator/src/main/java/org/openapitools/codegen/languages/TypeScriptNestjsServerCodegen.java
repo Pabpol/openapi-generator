@@ -143,7 +143,7 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
         } else if (param.isQueryParam) {
             annotation = "@Query('" + camelize(param.paramName, LOWERCASE_FIRST_CHAR) + "'" + pipes + ") ";
         } else if (param.isHeaderParam) {
-            annotation = "@Headers('" + camelize(param.paramName, LOWERCASE_FIRST_CHAR) + "'" + pipes + ") ";
+            annotation = "@Headers('" + (param.baseName) + "'" + pipes + ") ";
         }
         return annotation;
     }
@@ -550,32 +550,6 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
             }
         }
         return model;
-    }
-
-    @Override
-    public CodegenProperty fromProperty(String name, Schema p) {
-        CodegenProperty prop = super.fromProperty(name, p);
-        if (prop.isNumber) {
-            if (p.getMinimum() != null) {
-                prop.minimum = p.getMinimum().toString();
-            }
-            if (p.getMaximum() != null) {
-                prop.maximum = p.getMaximum().toString();
-            }
-        }
-        if (p.getFormat() != null && p.getFormat().equals("byte")) {
-            prop.dataType = "string";
-            prop.baseType = "string";
-            prop.vendorExtensions.put("isByteArray", true);
-        }
-        if (p.getEnum() != null && !p.getEnum().isEmpty()) {
-            prop.isEnum = true;
-            prop.allowableValues = new HashMap<>();
-            prop.allowableValues.put("enumVars", generateEnumVars(p.getEnum(), p.getType()));
-            prop.enumName = toModelName(prop.name) + "Enum";
-            prop.datatypeWithEnum = prop.enumName;
-        }
-        return prop;
     }
 
     @Override
