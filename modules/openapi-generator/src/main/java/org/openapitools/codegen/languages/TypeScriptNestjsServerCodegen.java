@@ -488,7 +488,9 @@ public class TypeScriptNestjsServerCodegen extends DefaultCodegen implements Cod
             }
         }
         Map<String, List<CodegenOperation>> operationsByTag = groupOperationsByTag(operationsMap);
-        generateServiceContracts(operationsByTag);
+        if (generateServiceInterface){
+            generateServiceContracts(operationsByTag);
+        }
         generateModuleFile(operationsByTag);
         additionalProperties.put("requiresScopeGuardGlobal", requiresScopeGuardGlobal);
         return operationsMap;

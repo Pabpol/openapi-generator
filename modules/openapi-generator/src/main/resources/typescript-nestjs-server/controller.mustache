@@ -1,6 +1,25 @@
-import { Controller, Get, Post, Put, Delete, Patch, Body, Param, Query, Headers, UseGuards, Inject, UseInterceptors, UsePipes} from '@nestjs/common';
-import { {{classname}}ServiceInterface } from '../services/{{classname}}ServiceInterface';
+import {
+    Controller,
+    Get,
+    Post,
+    Put,
+    Delete,
+    Patch,
+    Body,
+    Param,
+    Query,
+    Headers,
+    UseGuards,
+    Inject,
+    UseInterceptors,
+    UsePipes,
+    Optional,
+    HttpException,
+    HttpStatus,
+} from '@nestjs/common';
+{{#generateServiceInterface}}import { {{classname}}ServiceInterface } from '../services/{{classname}}ServiceInterface';
 import { {{operationTokenName}} } from '../constants/provider.tokens';
+{{/generateServiceInterface}}
 {{#imports}}import { {{classname}} } from '../models/{{classname}}';
 {{/imports}}
 {{#requiresScopeGuardGlobal}}import { ScopeGuard } from '../guards/scope.guard';
@@ -11,11 +30,11 @@ import { CustomValidationPipe } from '../pipes/CustomValidationPipe';
 import { CamelToSnakePipe } from '../pipes/CamelToSnakePipe';
 
 {{#requiresScopeGuardGlobal}}@UseGuards(ScopeGuard){{/requiresScopeGuardGlobal}}
-@Controller()
 @UsePipes(new SnakeToCamelPipe(), new CustomValidationPipe())
 @UseInterceptors(new CamelToSnakePipe())
-export class {{classname}}Controller {
-constructor(@Inject({{operationTokenName}}) private readonly service: {{classname}}ServiceInterface) {}
+@Controller('{{basePath}}')
+export abstract class {{classname}}Controller {
+        constructor() {}
 
 {{#operations}}
     {{#operation}}
@@ -23,11 +42,25 @@ constructor(@Inject({{operationTokenName}}) private readonly service: {{classnam
         {{#notes}}/** {{notes}} */{{/notes}}
         @{{httpMethod}}('{{{path}}}')
         {{#vendorExtensions.scopes}}
-            @Scopes({{{vendorExtensions.scopes}}})
+        @Scopes({{{vendorExtensions.scopes}}})
         {{/vendorExtensions.scopes}}
         async {{operationId}}({{{vendorExtensions.controllerSignatureList}}}): Promise<{{{returnType}}}> {
-        return await this.service.{{operationId}}({{vendorExtensions.argList}});
+            try {
+                return await this.{{operationId}}Impl({{vendorExtensions.argList}});
+            } catch (error) {
+                throw new HttpException(
+                    error.message,
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                );
+            }
         }
+
+    {{/operation}}
+{{/operations}}
+
+{{#operations}}
+    {{#operation}}
+        protected abstract {{operationId}}Impl({{vendorExtensions.serviceSignatureList}}): Promise<{{{returnType}}}>;
     {{/operation}}
 {{/operations}}
 }

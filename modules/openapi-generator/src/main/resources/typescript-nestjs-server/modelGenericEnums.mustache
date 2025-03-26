@@ -1,11 +1,18 @@
 {{#vendorExtensions.hasEnums}}
-    export namespace {{classname}} {
-    {{#allVars}}{{#isEnum}}
-        export enum {{enumName}} {
-            {{#allowableValues}}{{#enumVars}}{{name}} = '{{{value}}}'{{^-last}},{{/-last}}
-            {{/enumVars}}{{/allowableValues}}
-        }
-        {{/isEnum}}
-    {{/allVars}}
+  {{#allVars}}{{#isEnum}}
+    export type {{enumName}}Key = {{#allowableValues}}{{#enumVars}}'{{{value}}}'{{^-last}} | {{/-last}}{{/enumVars}}{{/allowableValues}};
+    export class {{enumName}} {
+        static readonly mapping ={
+        {{#allowableValues}}{{#enumVars}}
+            {{{name}}}: '{{{value}}}'{{^-last}},{{/-last}}
+        {{/enumVars}}{{/allowableValues}}
+        } as const;
+
+      static fromString(value: string): {{enumName}}Key | undefined {
+        const entries = Object.entries(this.mapping) as [{{enumName}}Key, string][];
+        const found = entries.find(([_, val]) => val === value);
+        return found ? found[0] : undefined;
     }
+    };
+  {{/isEnum}}{{/allVars}}
 {{/vendorExtensions.hasEnums}}

@@ -4,21 +4,24 @@ import { SCOPES_KEY } from '../decorators/scopes.decorator';
 
 @Injectable()
 export class ScopeGuard implements CanActivate {
-constructor(private readonly reflector: Reflector) {}
+    constructor(private readonly reflector: Reflector) { }
 
-canActivate(context: ExecutionContext): boolean {
-const requiredScopes = this.reflector.getAllAndOverride<string[]>("scopes", [
-context.getHandler(),
-context.getClass(),
-]);
-if (!requiredScopes || requiredScopes.length === 0) {
-return true;
-}
-const request = context.switchToHttp().getRequest();
-const user = request.user;
-if (!user || !user.scopes) {
-return false;
-}
-return requiredScopes.some((scope: any) => user.scopes.includes(scope));
-}
+    canActivate(context: ExecutionContext): boolean {
+        const requiredScopes = this.reflector.getAllAndOverride<string[]>(SCOPES_KEY, [
+            context.getHandler(),
+            context.getClass(),
+        ]);
+
+        if (!requiredScopes || requiredScopes.length === 0) {
+            return true;
+        }
+        const request = context.switchToHttp().getRequest();
+
+        const auth = request.auth;
+
+        if (!auth || !auth.scope) {
+            return false;
+        }
+        return requiredScopes.some((scope: any) => auth.scope.includes(scope));
+    }
 }

@@ -10,12 +10,9 @@ import { CamelToSnakePipe } from './pipes/CamelToSnakePipe';
 
 
 @Module({
-    controllers: [
-    {{#controllers}}
-        {{controllerName}}{{controllerSuffix}},
-    {{/controllers}}
-    ]
-})
+    providers: [Reflector, ScopeGuard, SnakeToCamelPipe, CustomValidationPipe, CamelToSnakePipe],
+    exports: [Reflector, ScopeGuard, SnakeToCamelPipe, CustomValidationPipe, CamelToSnakePipe]
+  })
 export class ApiModule {
   static forRoot(options: {
     providers: Array<{

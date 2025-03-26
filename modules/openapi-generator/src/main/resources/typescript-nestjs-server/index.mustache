@@ -1,7 +1,7 @@
 export * from './src/api.module';
 export * from './src/guards/scope.guard';
-{{#services}}export * from './src/services/{{serviceFileName}}';
-{{/services}}
+{{#generateServiceInterface}}export * from './src/services/{{serviceFileName}}';
+{{/generateServiceInterface}}
 {{#controllers}}export * from './src/controllers/{{controllerFileName}}';
 {{/controllers}}
 export * from './src/pipes/CustomValidationPipe';
