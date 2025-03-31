@@ -1,6 +1,6 @@
 {{>licenseInfo}}
 /* tslint:disable:no-unused-variable member-ordering */
-
+import { plainToInstance } from 'class-transformer';
 {{#useAxiosHttpModule}}
 import { Injectable, Optional } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
@@ -9,7 +9,7 @@ import { HttpService } from '@nestjs/axios';
 import { HttpService, Injectable, Optional } from '@nestjs/common';
 {{/useAxiosHttpModule}}
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
-import { Observable, from, of, switchMap } from 'rxjs';
+import { Observable, from, of, switchMap, lastValueFrom } from 'rxjs';
 {{#imports}}
 import { {{classname}} } from '../{{filename}}';
 {{/imports}}
@@ -51,6 +51,19 @@ export interface {{classname}}{{operationIdCamelCase}}Request {
  * {{&description}}
  */
 {{/description}}
+
+
+
+function snakeToCamel(obj: any): any {
+    if (typeof obj !== 'object' || obj === null) return obj;
+    if (Array.isArray(obj)) return obj.map(snakeToCamel);
+    return Object.keys(obj).reduce((acc, key) => {
+        const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+        acc[camelKey] = snakeToCamel(obj[key]);
+        return acc;
+    }, {});
+}
+
 @Injectable()
 {{#withInterfaces}}
 export class {{classname}} implements {{classname}}Interface {
@@ -100,8 +113,7 @@ export class {{classname}} {
     public {{nickname}}({{#allParams.0}}requestParameters: {{classname}}{{operationIdCamelCase}}Request, {{/allParams.0}}{{nickname}}Opts?: { config?: AxiosRequestConfig }): Observable<any> {
     {{/useSingleRequestParameter}}
     {{^useSingleRequestParameter}}
-    public {{nickname}}({{#allParams}}{{^isConstEnumParam}}{{paramName}}{{^required}}?{{/required}}: {{{dataType}}}, {{/isConstEnumParam}}{{/allParams}}{{nickname}}Opts?: { config?: AxiosRequestConfig }): Observable<AxiosResponse<{{#returnType}}{{{returnType}}}{{#isResponseTypeFile}}|undefined{{/isResponseTypeFile}}{{/returnType}}{{^returnType}}any{{/returnType}}>>;
-    public {{nickname}}({{#allParams}}{{^isConstEnumParam}}{{paramName}}{{^required}}?{{/required}}: {{{dataType}}}, {{/isConstEnumParam}}{{/allParams}}{{nickname}}Opts?: { config?: AxiosRequestConfig }): Observable<any> {
+    public async {{nickname}}({{#allParams}}{{^isConstEnumParam}}{{paramName}}{{^required}}?{{/required}}: {{{dataType}}}, {{/isConstEnumParam}}{{/allParams}}{{nickname}}Opts?: { config?: AxiosRequestConfig }): Promise<AxiosResponse<{{#returnType}}{{{returnType}}}{{#isResponseTypeFile}}|undefined{{/isResponseTypeFile}}{{/returnType}}{{^returnType}}any{{/returnType}}>> {
     {{/useSingleRequestParameter}}
 {{#allParams.0}}
 {{#useSingleRequestParameter}}
@@ -168,7 +180,7 @@ export class {{classname}} {
         {{/isArray}}
 {{/headerParams}}
 
-        let accessTokenObservable: Observable<any> = of(null);
+        let accessToken: any = null;
 
 {{#authMethods}}
         // authentication ({{name}}) required
@@ -197,16 +209,16 @@ export class {{classname}} {
 {{/isBasicBasic}}
 {{#isBasicBearer}}
         if (typeof this.configuration.accessToken === 'function') {
-            accessTokenObservable = from(Promise.resolve(this.configuration.accessToken()));
+            accessToken = await Promise.resolve(this.configuration.accessToken());
         } else if (this.configuration.accessToken) {
-            accessTokenObservable = from(Promise.resolve(this.configuration.accessToken));
+            accessToken = await Promise.resolve(this.configuration.accessToken);
         }
 {{/isBasicBearer}}
 {{#isOAuth}}
-        if (this.configuration.accessToken) {
-            accessTokenObservable = typeof this.configuration.accessToken === 'function'
-                ? from(Promise.resolve(this.configuration.accessToken()))
-                : from(Promise.resolve(this.configuration.accessToken))
+        if (typeof this.configuration.accessToken === 'function') {
+            accessToken = await Promise.resolve(this.configuration.accessToken());
+        } else if (this.configuration.accessToken) {
+            accessToken = await Promise.resolve(this.configuration.accessToken);
         }
 
 {{/isOAuth}}
@@ -276,29 +288,58 @@ export class {{classname}} {
 {{/formParams}}
 
 {{/hasFormParams}}
-        return accessTokenObservable.pipe(
-            switchMap((accessToken) => {
-                if (accessToken) {
-                    headers['Authorization'] = `Bearer ${accessToken}`;
-                }
 
-                return this.httpClient.{{httpMethod}}{{^isResponseFile}}<{{#returnType}}{{{returnType}}}{{#isResponseTypeFile}}|undefined{{/isResponseTypeFile}}{{/returnType}}{{^returnType}}any{{/returnType}}>{{/isResponseFile}}(`${this.basePath}{{{path}}}`,{{#isBodyAllowed}}
-                    {{#bodyParam}}{{paramName}}{{/bodyParam}}{{^bodyParam}}{{#hasFormParams}}convertFormParamsToString ? formParams!.toString() : formParams!{{/hasFormParams}}{{^hasFormParams}}null{{/hasFormParams}}{{/bodyParam}},{{/isBodyAllowed}}
-                    {
-        {{#hasQueryParams}}
-                        params: queryParameters,
-        {{/hasQueryParams}}
-        {{#isResponseFile}}
-                        responseType: "blob",
-        {{/isResponseFile}}
-                        withCredentials: this.configuration.withCredentials,
-                        ...{{nickname}}Opts?.config,
-                        headers: {...headers, ...{{nickname}}Opts?.config?.headers},
-                    }
-                );
-            })
-        );
+        if (accessToken) {
+            headers['Authorization'] = `Bearer ${accessToken}`;
+        }
+
+
+        const config: AxiosRequestConfig = {
+            withCredentials: this.configuration.withCredentials,
+            ...{{nickname}}Opts?.config,
+            headers: { ...headers, ...{{nickname}}Opts?.config?.headers },
+        };
+
+        const response = await lastValueFrom(this.httpClient.{{httpMethod}}<{{#returnType}}{{{returnType}}}{{#isResponseTypeFile}}|undefined{{/isResponseTypeFile}}{{/returnType}}{{^returnType}}any{{/returnType}}>(`${this.basePath}{{{path}}}`, {{#isBodyAllowed}}
+            {{#bodyParam}}{{paramName}},{{/bodyParam}}{{^bodyParam}}null{{/bodyParam}}{{/isBodyAllowed}}{{^isBodyAllowed}}{{/isBodyAllowed}} config));
+        const transformedData = snakeToCamel(response.data);
+        return {
+            ...response,
+            data: plainToInstance(
+                {{#returnType}}{{{returnType}}}{{/returnType}}{{^returnType}}Object{{/returnType}},
+                transformedData,
+                { enableImplicitConversion: true }
+            )
+        };
     }
 {{/operation}}
 }
+{{/operations}}
+
+{{#operations}}
+{{#operation}}
+{{^useSingleRequestParameter}}
+{{#allParams}}
+  {{#isEnum}}
+    {{paramName}}{{^required}}?{{/required}}: {{enumName}},
+    export type {{enumName}}Key = {{#allowableValues}}{{#enumVars}}{{{value}}}{{^last}} | {{/last}}{{/enumVars}}{{/allowableValues}};
+
+    export class {{enumName}} {
+        static readonly mapping = {
+    {{#allowableValues}}{{#enumVars}}
+            {{{name}}}: {{{value}}}{{^last}},{{/last}}
+    {{/enumVars}}{{/allowableValues}}
+        } as const;
+
+        static fromString(value: string): {{enumName}}Key | undefined {
+            const entries = Object.entries(this.mapping) as [{{enumName}}Key, string][];
+            const found = entries.find(([_, val]) => val === value);
+            return found ? found[0] : undefined;
+        }
+    }
+  {{/isEnum}}
+
+{{/allParams}}
+{{/useSingleRequestParameter}}
+{{/operation}}
 {{/operations}}

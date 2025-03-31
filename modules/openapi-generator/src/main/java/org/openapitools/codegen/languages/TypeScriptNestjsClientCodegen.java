@@ -16,9 +16,11 @@
 
 package org.openapitools.codegen.languages;
 
+import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.media.Schema;
 import lombok.Getter;
 import lombok.Setter;
+import org.apache.commons.lang3.StringUtils;
 import org.openapitools.codegen.*;
 import org.openapitools.codegen.meta.GeneratorMetadata;
 import org.openapitools.codegen.meta.Stability;
@@ -36,6 +38,7 @@ import java.util.*;
 
 import static org.apache.commons.lang3.StringUtils.capitalize;
 import static org.openapitools.codegen.utils.CamelizeOption.LOWERCASE_FIRST_LETTER;
+import static org.openapitools.codegen.utils.CamelizeOption.UPPERCASE_FIRST_CHAR;
 import static org.openapitools.codegen.utils.StringUtils.*;
 
 public class TypeScriptNestjsClientCodegen extends AbstractTypeScriptClientCodegen {
@@ -136,9 +139,9 @@ public class TypeScriptNestjsClientCodegen extends AbstractTypeScriptClientCodeg
         supportingFiles.add(new SupportingFile("configuration.mustache", getIndexDirectory(), "configuration.ts"));
         supportingFiles.add(new SupportingFile("variables.mustache", getIndexDirectory(), "variables.ts"));
         //supportingFiles.add(new SupportingFile("encoder.mustache", getIndexDirectory(), "encoder.ts"));
-        supportingFiles.add(new SupportingFile("gitignore", "", ".gitignore"));
-        supportingFiles.add(new SupportingFile("git_push.sh.mustache", "", "git_push.sh"));
         supportingFiles.add(new SupportingFile("README.mustache", getIndexDirectory(), "README.md"));
+        supportingFiles.add(new SupportingFile("npmignore.mustache", "", ".npmignore"));
+
 
         // determine Nestjs version
         SemVer nestVersion;
@@ -198,6 +201,8 @@ public class TypeScriptNestjsClientCodegen extends AbstractTypeScriptClientCodeg
         if (additionalProperties.containsKey(FILE_NAMING)) {
             this.setFileNaming(additionalProperties.get(FILE_NAMING).toString());
         }
+        additionalProperties.put("generateEnumModels", true);
+
     }
 
     private void addNpmPackageGeneration(SemVer nestVersion) {
@@ -209,9 +214,7 @@ public class TypeScriptNestjsClientCodegen extends AbstractTypeScriptClientCodeg
         additionalProperties.put("tsVersion", ">=3.6.0. <4.0.0");
         //Files for building our lib
         supportingFiles.add(new SupportingFile("package.mustache", getIndexDirectory(), "package.json"));
-        supportingFiles.add(new SupportingFile("tsconfig.build.mustache", getIndexDirectory(), "tsconfig.build.json"));
         supportingFiles.add(new SupportingFile("tsconfig.mustache", getIndexDirectory(), "tsconfig.json"));
-        supportingFiles.add(new SupportingFile("tslint.mustache", getIndexDirectory(), "tslint.json"));
     }
 
     private String getIndexDirectory() {
@@ -230,6 +233,15 @@ public class TypeScriptNestjsClientCodegen extends AbstractTypeScriptClientCodeg
 
     @Override
     public String getTypeDeclaration(Schema p) {
+
+        if (openAPI != null && openAPI.getInfo() != null) {
+            String title = openAPI.getInfo().getTitle();
+            String version = openAPI.getInfo().getVersion();
+            String projectName = title.toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("-$", "");
+            additionalProperties.put("projectName", projectName);
+            additionalProperties.put("projectVersion", version);
+        }
+
         if (ModelUtils.isFileSchema(p)) {
             return "Blob";
         } else {
@@ -309,7 +321,7 @@ public class TypeScriptNestjsClientCodegen extends AbstractTypeScriptClientCodeg
 
                         // Add the more complicated component instead of just the brace.
                         CodegenParameter parameter = findPathParameterByName(op, parameterName.toString());
-                        pathBuffer.append(toVarName(parameterName.toString()));
+                        pathBuffer.append(camelize(parameterName.toString(), LOWERCASE_FIRST_LETTER));
                         if (parameter != null && parameter.isDateTime) {
                             pathBuffer.append(".toISOString()");
                         }
@@ -332,6 +344,9 @@ public class TypeScriptNestjsClientCodegen extends AbstractTypeScriptClientCodeg
 
             for (CodegenParameter param : op.allParams) {
                 param.vendorExtensions.putIfAbsent("x-param-has-sanitized-name", !param.baseName.equals(param.paramName));
+                if (param.isEnum || param.enumName != null) {
+                    addEnumModelToSchemas(param, allModels);
+                }
             }
         }
 
@@ -369,12 +384,55 @@ public class TypeScriptNestjsClientCodegen extends AbstractTypeScriptClientCodeg
         return postProcessModelsEnum(result);
     }
 
+    private void addEnumModelToSchemas(CodegenParameter parameter, List<ModelMap> allModels) {
+        // Verificar si el modelo ya existe en allModels
+        for (ModelMap modelMap : allModels) {
+            if (modelMap.getModel().name.equals(parameter.enumName)) {
+                // El modelo ya existe, no agregarlo nuevamente
+                return;
+            }
+        }
+
+        // Crear el esquema de enumeración
+        Schema<String> schema = new Schema<>();
+        schema.setName(parameter.enumName);
+        schema.setType("string");
+        schema.setEnum(parameter._enum);
+
+        if (openAPI.getComponents() == null) {
+            openAPI.setComponents(new Components());
+        }
+        openAPI.getComponents().addSchemas(schema.getName(), schema);
+
+        // Crear el modelo y agregarlo a allModels
+        CodegenModel model = new CodegenModel();
+        model.name = parameter.enumName;
+        model.classname = parameter.enumName;
+
+        List<CodegenProperty> vars = new ArrayList<>();
+        for (String value : parameter._enum) {
+            CodegenProperty property = new CodegenProperty();
+            property.name = value;
+            property.dataType = "string";
+            vars.add(property);
+        }
+        model.vars = vars;
+        model.vendorExtensions = parameter.vendorExtensions;
+
+        ModelMap modelMap = new ModelMap();
+        modelMap.setModel(model);
+        allModels.add(modelMap);
+    }
     @Override
     public Map<String, ModelsMap> postProcessAllModels(Map<String, ModelsMap> objs) {
         Map<String, ModelsMap> result = super.postProcessAllModels(objs);
         for (ModelsMap entry : result.values()) {
             for (ModelMap mo : entry.getModels()) {
                 CodegenModel cm = mo.getModel();
+                boolean modelHasEnum = false;
+                if (!cm.getClassFilename().isEmpty()){
+                    cm.classFilename = cm.getClassname();
+                }
                 if (taggedUnions) {
                     mo.put(TAGGED_UNIONS, true);
                     if (cm.discriminator != null && cm.children != null) {
@@ -386,11 +444,19 @@ public class TypeScriptNestjsClientCodegen extends AbstractTypeScriptClientCodeg
                         cm.imports.remove(cm.parent);
                     }
                 }
+                for (CodegenProperty prop : cm.allVars) {
+                    if (prop.isEnum) {
+                        modelHasEnum = true;
+                        break;
+                    }
+                }
+                cm.vendorExtensions.put("hasEnums", modelHasEnum);
                 // Add additional filename information for imports
                 Set<String> parsedImports = parseImports(cm);
                 mo.put("tsImports", toTsImports(cm, parsedImports));
             }
         }
+
         return result;
     }
 
@@ -543,8 +609,40 @@ public class TypeScriptNestjsClientCodegen extends AbstractTypeScriptClientCodeg
         if ("kebab-case".equals(fileNaming)) {
             name = dashize(underscore(name));
         } else {
-            name = camelize(name, LOWERCASE_FIRST_LETTER);
+            name = camelize(name, UPPERCASE_FIRST_CHAR);
         }
         return name;
     }
+    private String toEnumName(CodegenParameter parameter) {
+        String enumName = parameter.paramName;
+        enumName = addSuffix(enumName, "Enum");
+        return toTypescriptTypeName(enumName, "_");
+    }
+
+    private List<Map<String, Object>> generateEnumVars(List<String> enumValues, String dataType) {
+        List<Map<String, Object>> enumVars = new ArrayList<>();
+        for (int i = 0; i < enumValues.size(); i++) {
+            String value = enumValues.get(i);
+            Map<String, Object> enumVar = new HashMap<>();
+            enumVar.put("name", value);
+            enumVar.put("value", dataType + "_" + value);
+            enumVar.put("isString", true);
+            enumVars.add(enumVar);
+        }
+        return enumVars;
+    }
+
+    protected String addSuffix(String name, String suffix) {
+        if (!StringUtils.isEmpty(suffix)) {
+            name = name + "_" + suffix;
+        }
+
+        return name;
+    }
+
+    @Override
+    public String toVarName(String name){
+        return camelize(name, LOWERCASE_FIRST_LETTER);
+    }
+
 }
